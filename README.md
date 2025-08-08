@@ -1,7 +1,7 @@
 # Deep CFR & Single Deep CFR
 A scalable implementation of [Deep CFR](https://arxiv.org/pdf/1811.00164.pdf) [1] and its successor
 [Single Deep CFR (SD-CFR)](https://arxiv.org/pdf/1901.07621.pdf) [2] in the
-[PokerRL](https://github.com/TinkeringCode/PokerRL) framework.
+[PokerRL-2025](https://github.com/theGholland/PokerRL-2025) framework.
 
 This codebase is designed for:
 - Researchers to compare new methods to these baselines.
@@ -13,7 +13,7 @@ This implementation seamlessly be runs on your local machine and on hundreds of 
 The run-script `DeepCFR/paper_experiment_sdcfr_vs_deepcfr_h2h.py` launches one run of the Head-to-Head performance
 comparison between Single Deep CFR and Deep CFR as presented in [2]. We ran the experiments on an m5.12xlarge instance
 where we disabled hyper-threading. We set the instance up for distributed runs as explained in
-[PokerRL](https://github.com/TinkeringCode/PokerRL). To reproduce, you can simply clone this repository onto the
+[PokerRL-2025](https://github.com/theGholland/PokerRL-2025). To reproduce, you can simply clone this repository onto the
 instance and start the script via
 ```
 git clone https://github.com/TinkeringCode/Deep-CFR.git
@@ -37,15 +37,17 @@ the experiment analyzing the effect of reservoir sampling on B^M with various ca
 ## (Single) Deep CFR on your Local Machine
 
 ### Install locally
-This codebase only supports Linux officially (Mac has not been tested).
+This project runs on Python 3.12 and officially supports Linux (Mac has not been tested).
 
-First, please install Docker and download the [PyCrayon](https://github.com/torrvision/crayon) container. For dependency
-management we recommend Miniconda. To install the dependencies, simply activate your conda environment and then run
+First, install Docker and download the [PyCrayon](https://github.com/torrvision/crayon) container. Then install the
+Python dependencies using
 
 ```
-conda install pytorch=0.4.1 -c pytorch -y
-pip install PokerRL
+pip install --no-build-isolation -r requirements.txt
 ```
+
+The `--no-build-isolation` flag is required so that the PokerRL-2025 dependency correctly builds its PyCrayon logger under
+Python 3.12.
 
 
 ### Running experiments locally
@@ -56,7 +58,7 @@ docker start crayon
 ```
 
 You can now view logs at `localhost:8888` in your browser. To run Deep CFR or SD-CFR with custom hyperparameters in
-any Poker game supported by PokerRL, build a script similar to `DeepCFR/leduc_example.py`. Run-scripts define
+any Poker game supported by PokerRL-2025, build a script similar to `DeepCFR/leduc_example.py`. Run-scripts define
 the hyperparameters, the game to be played, and the evaluation metrics. Here is a very minimalistic example showing a
 few of the available settings:
 
@@ -98,7 +100,7 @@ is expected to perform better, is faster, and requires less memory.
 
 ## Cloud & Clusters
 For deployment on AWS, whether single-core, many-core distributed, or on a cluster, please first follow
-the tutorial in the corresponding section of [PokerRL](https://github.com/TinkeringCode/PokerRL)'s README.
+the tutorial in the corresponding section of [PokerRL-2025](https://github.com/theGholland/PokerRL-2025)'s README.
 
 We recommend forking this repository so you can write your own scripts but still have remote access through git.
 In your run-script set either the `DISTRIBUTED` or the `CLUSTER` option of the TrainingProfile to True
@@ -119,15 +121,15 @@ the underlying framework we use for distributed computing can be found at [ray](
 
 
 ## Citing
-If you use this repository in your research, you can cite it by citing PokerRL as follows:
+If you use this repository in your research, you can cite it by citing PokerRL-2025 as follows:
 ```
 @misc{steinberger2019pokerrl,
     author = {Eric Steinberger},
-    title = {PokerRL},
+    title = {PokerRL-2025},
     year = {2019},
     publisher = {GitHub},
     journal = {GitHub repository},
-    howpublished = {\url{https://github.com/TinkeringCode/PokerRL}},
+    howpublished = {\url{https://github.com/theGholland/PokerRL-2025}},
 }
 ```
 

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deep-cfr"
+version = "0.1.0"
+description = "Scalable implementation of Deep CFR and SD-CFR algorithms on top of PokerRL-2025."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "Eric Steinberger" }]
+license = {file = "LICENSE"}
+dependencies = [
+    "numpy==2.3.2",
+    "psutil==7.0.0",
+    "ray==2.48.0",
+    "torch==2.8.0",
+    "PokerRL @ git+https://github.com/theGholland/PokerRL-2025.git",
+    "pycrayon==0.5",
+    "requests>=2.32.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/theGholland/Deep-CFR-2025"
+
+[tool.setuptools.packages.find]
+include = ["DeepCFR*"]

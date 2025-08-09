@@ -40,7 +40,14 @@ the experiment analyzing the effect of reservoir sampling on B^M with various ca
 This project runs on Python 3.12 and officially supports Linux (Mac has not been tested).
 
 First, install Docker and download the [PyCrayon](https://github.com/torrvision/crayon) container. Then install the
-Python dependencies using
+project and its dependencies with
+
+```
+pip install --no-build-isolation .
+```
+
+This will register the `DeepCFR` package so it can be imported from anywhere. If you only want to install the
+dependencies without installing the package itself, use
 
 ```
 pip install --no-build-isolation -r requirements.txt

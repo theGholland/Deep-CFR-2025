@@ -42,8 +42,20 @@ try:  # pragma: no cover - best effort patching
                 pass
 
             ray.init(**ray_init_kwargs)
-
     MaybeRay.init_local = _init_local
+
+    def _create_worker(self, cls, *args, num_gpus=None):
+        """Create a Ray actor with optional fractional GPU allocation."""
+        if self.runs_distributed:
+            if num_gpus is None:
+                try:
+                    num_gpus = 1 if torch.cuda.is_available() else 0
+                except Exception:  # pragma: no cover - best effort GPU detection
+                    num_gpus = 0
+            return cls.options(num_gpus=num_gpus).remote(*args)
+        return cls(*args)
+
+    MaybeRay.create_worker = _create_worker
 except Exception:  # noqa: S110
     # Dependencies are optional at import time; if they are missing we simply
     # skip the patch and rely on the original implementation.

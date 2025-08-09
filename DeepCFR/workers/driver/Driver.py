@@ -1,6 +1,7 @@
 from DeepCFR.EvalAgentDeepCFR import EvalAgentDeepCFR
 from DeepCFR.workers.driver._HighLevelAlgo import HighLevelAlgo
 from PokerRL.rl.base_cls.workers.DriverBase import DriverBase
+import torch
 
 
 class Driver(DriverBase):
@@ -20,6 +21,12 @@ class Driver(DriverBase):
                          iteration_to_import=iteration_to_import, name_to_import=name_to_import,
                          chief_cls=Chief, eval_agent_cls=EvalAgentDeepCFR)
 
+        if torch.cuda.is_available():
+            total_gpu = torch.cuda.device_count()
+            self._gpu_fraction = min(1.0, total_gpu / (t_prof.n_learner_actors + t_prof.n_seats))
+        else:
+            self._gpu_fraction = 0
+
         if "h2h" in list(eval_methods.keys()):
             assert EvalAgentDeepCFR.EVAL_MODE_SINGLE in t_prof.eval_modes_of_algo
             assert EvalAgentDeepCFR.EVAL_MODE_AVRG_NET in t_prof.eval_modes_of_algo
@@ -32,7 +39,8 @@ class Driver(DriverBase):
             self._ray.create_worker(LearnerActor,
                                     t_prof,
                                     i,
-                                    self.chief_handle)
+                                    self.chief_handle,
+                                    num_gpus=self._gpu_fraction)
             for i in range(t_prof.n_learner_actors)
         ]
 
@@ -41,7 +49,8 @@ class Driver(DriverBase):
             self._ray.create_worker(ParameterServer,
                                     t_prof,
                                     p,
-                                    self.chief_handle)
+                                    self.chief_handle,
+                                    num_gpus=self._gpu_fraction)
             for p in range(t_prof.n_seats)
         ]
 

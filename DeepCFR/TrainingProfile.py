@@ -4,6 +4,7 @@
 import copy
 
 import torch
+from torch.utils.tensorboard import SummaryWriter
 from PokerRL.game import bet_sets
 from PokerRL.game.games import DiscretizedNLLeduc
 from PokerRL.game.wrappers import HistoryEnvBuilder, FlatLimitPokerEnvBuilder
@@ -32,7 +33,6 @@ class TrainingProfile(TrainingProfileBase):
 
                  # ------ Computing
                  path_data=None,
-                 local_crayon_server_docker_address="localhost",
                  device_inference="cpu",
                  device_training="cpu",
                  device_parameter_server="cpu",
@@ -173,7 +173,6 @@ class TrainingProfile(TrainingProfileBase):
             DISTRIBUTED=DISTRIBUTED,
             CLUSTER=CLUSTER,
             device_inference=device_inference,
-            local_crayon_server_docker_address=local_crayon_server_docker_address,
 
             module_args={
                 "adv_training": AdvTrainingArgs(
@@ -230,6 +229,8 @@ class TrainingProfile(TrainingProfileBase):
         self.iter_weighting_exponent = iter_weighting_exponent
         self.sampler = sampler
         self.n_actions_traverser_samples = n_actions_traverser_samples
+
+        self.tb_writer = SummaryWriter(log_dir=self.path_log_storage)
 
         # SINGLE
         self.export_each_net = export_each_net

@@ -39,32 +39,28 @@ the experiment analyzing the effect of reservoir sampling on B^M with various ca
 ### Install locally
 This project runs on Python 3.12 and officially supports Linux (Mac has not been tested).
 
-First, install Docker and download the [PyCrayon](https://github.com/torrvision/crayon) container. Then install the
-project and its dependencies with
+Install the project and its dependencies with
 
 ```
-pip install --no-build-isolation .
+pip install .
 ```
 
 This will register the `DeepCFR` package so it can be imported from anywhere. If you only want to install the
 dependencies without installing the package itself, use
 
 ```
-pip install --no-build-isolation -r requirements.txt
+pip install -r requirements.txt
 ```
-
-The `--no-build-isolation` flag is required so that the PokerRL-2025 dependency correctly builds its PyCrayon logger under
-Python 3.12.
 
 
 ### Running experiments locally
-Before starting (Single) Deep CFR, please spin up the log server by
+To monitor training progress, launch TensorBoard in a separate terminal with
+
 ```
-docker run -d -p 8888:8888 -p 8889:8889 --name crayon alband/crayon
-docker start crayon
+tensorboard --logdir ~/poker_ai_data/logs
 ```
 
-You can now view logs at `localhost:8888` in your browser. To run Deep CFR or SD-CFR with custom hyperparameters in
+Then open `http://localhost:6006` in your browser to view logs. To run Deep CFR or SD-CFR with custom hyperparameters in
 any Poker game supported by PokerRL-2025, build a script similar to `DeepCFR/leduc_example.py`. Run-scripts define
 the hyperparameters, the game to be played, and the evaluation metrics. Here is a very minimalistic example showing a
 few of the available settings:

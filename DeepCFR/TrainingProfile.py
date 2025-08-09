@@ -246,3 +246,12 @@ class TrainingProfile(TrainingProfileBase):
 
         assert isinstance(device_parameter_server, str), "Please pass a string (either 'cpu' or 'cuda')!"
         self.device_parameter_server = torch.device(device_parameter_server)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["tb_writer"] = None
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.tb_writer = SummaryWriter(log_dir=self.path_log_storage) if self.log_verbose else None

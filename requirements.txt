@@ -3,5 +3,5 @@ psutil==7.0.0
 ray==2.48.0
 torch==2.8.0
 PokerRL @ git+https://github.com/theGholland/PokerRL-2025.git
-pycrayon==0.5
+tensorboard==2.17.0
 requests>=2.32.4

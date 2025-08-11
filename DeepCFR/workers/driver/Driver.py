@@ -23,6 +23,10 @@ class Driver(DriverBase):
         cpu_fraction = total_cpu / desired_actors
         MaybeRay._default_num_cpus = cpu_fraction
 
+        total_mem = psutil.virtual_memory().total
+        ray_mem = min(2 * (10 ** 10), int(total_mem * 0.8))
+        memory_per_la = ray_mem / max(1, t_prof.n_learner_actors)
+
         def _is_cuda(device):
             return (
                 (isinstance(device, torch.device) and device.type == "cuda")
@@ -51,6 +55,7 @@ class Driver(DriverBase):
         self._gpu_fraction = gpu_fraction
         self._la_uses_gpu = la_uses_gpu
         self._ps_uses_gpu = ps_uses_gpu
+        self._memory_per_la = memory_per_la
 
         if "h2h" in list(eval_methods.keys()):
             assert EvalAgentDeepCFR.EVAL_MODE_SINGLE in t_prof.eval_modes_of_algo
@@ -66,18 +71,21 @@ class Driver(DriverBase):
                                     i,
                                     self.chief_handle,
                                     num_gpus=self._gpu_fraction if self._la_uses_gpu else 0,
-                                    num_cpus=self._cpu_fraction)
+                                    num_cpus=self._cpu_fraction,
+                                    memory=self._memory_per_la)
             for i in range(t_prof.n_learner_actors)
         ]
 
         print("Creating Parameter Servers...")
         self.ps_handles = [
-            self._ray.create_worker(ParameterServer,
-                                    t_prof,
-                                    p,
-                                    self.chief_handle,
-                                    num_gpus=self._gpu_fraction if self._ps_uses_gpu else 0,
-                                    num_cpus=self._cpu_fraction)
+            self._ray.create_worker(
+                ParameterServer,
+                t_prof,
+                p,
+                self.chief_handle,
+                num_gpus=self._gpu_fraction if self._ps_uses_gpu else 0,
+                num_cpus=self._cpu_fraction,
+            )
             for p in range(t_prof.n_seats)
         ]
 

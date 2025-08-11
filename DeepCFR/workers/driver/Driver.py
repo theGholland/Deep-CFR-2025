@@ -1,6 +1,8 @@
 from DeepCFR.EvalAgentDeepCFR import EvalAgentDeepCFR
 from DeepCFR.workers.driver._HighLevelAlgo import HighLevelAlgo
 from PokerRL.rl.base_cls.workers.DriverBase import DriverBase
+from PokerRL.rl.MaybeRay import MaybeRay
+import psutil
 import torch
 
 
@@ -11,15 +13,21 @@ class Driver(DriverBase):
             from DeepCFR.workers.chief.dist import Chief
             from DeepCFR.workers.la.dist import LearnerActor
             from DeepCFR.workers.ps.dist import ParameterServer
-
         else:
             from DeepCFR.workers.chief.local import Chief
             from DeepCFR.workers.la.local import LearnerActor
             from DeepCFR.workers.ps.local import ParameterServer
 
+        total_cpu = psutil.cpu_count() or 1
+        desired_actors = t_prof.n_learner_actors + t_prof.n_seats + 1  # +1 for Chief
+        cpu_fraction = total_cpu / desired_actors
+        MaybeRay._default_num_cpus = cpu_fraction
+
         super().__init__(t_prof=t_prof, eval_methods=eval_methods, n_iterations=n_iterations,
                          iteration_to_import=iteration_to_import, name_to_import=name_to_import,
                          chief_cls=Chief, eval_agent_cls=EvalAgentDeepCFR)
+
+        self._cpu_fraction = cpu_fraction
 
         if torch.cuda.is_available():
             total_gpu = torch.cuda.device_count()
@@ -40,7 +48,8 @@ class Driver(DriverBase):
                                     t_prof,
                                     i,
                                     self.chief_handle,
-                                    num_gpus=self._gpu_fraction)
+                                    num_gpus=self._gpu_fraction,
+                                    num_cpus=self._cpu_fraction)
             for i in range(t_prof.n_learner_actors)
         ]
 
@@ -50,7 +59,8 @@ class Driver(DriverBase):
                                     t_prof,
                                     p,
                                     self.chief_handle,
-                                    num_gpus=self._gpu_fraction)
+                                    num_gpus=self._gpu_fraction,
+                                    num_cpus=self._cpu_fraction)
             for p in range(t_prof.n_seats)
         ]
 

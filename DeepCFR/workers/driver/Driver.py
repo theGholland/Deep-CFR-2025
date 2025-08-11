@@ -23,12 +23,25 @@ class Driver(DriverBase):
         cpu_fraction = total_cpu / desired_actors
         MaybeRay._default_num_cpus = cpu_fraction
 
-        if torch.cuda.is_available():
-            total_gpu = torch.cuda.device_count()
-            gpu_fraction = min(1.0, total_gpu / (t_prof.n_learner_actors + t_prof.n_seats + len(eval_methods)))
-        else:
-            gpu_fraction = 0
-        MaybeRay._default_num_gpus = gpu_fraction
+        def _is_cuda(device):
+            return (
+                (isinstance(device, torch.device) and device.type == "cuda")
+                or (isinstance(device, str) and device.startswith("cuda"))
+            )
+
+        total_gpu = torch.cuda.device_count() if torch.cuda.is_available() else 0
+
+        la_uses_gpu = _is_cuda(t_prof.module_args["adv_training"].device_training) or _is_cuda(t_prof.device_inference)
+        ps_uses_gpu = _is_cuda(t_prof.device_parameter_server)
+        eval_uses_gpu = _is_cuda(t_prof.device_inference)
+
+        la_gpu_workers = t_prof.n_learner_actors if la_uses_gpu else 0
+        ps_gpu_workers = t_prof.n_seats if ps_uses_gpu else 0
+        eval_gpu_workers = len(eval_methods) if eval_uses_gpu else 0
+        gpu_workers = la_gpu_workers + ps_gpu_workers + eval_gpu_workers
+        gpu_fraction = min(1.0, total_gpu / gpu_workers) if gpu_workers > 0 else 0
+
+        MaybeRay._default_num_gpus = gpu_fraction if eval_uses_gpu else 0
 
         super().__init__(t_prof=t_prof, eval_methods=eval_methods, n_iterations=n_iterations,
                          iteration_to_import=iteration_to_import, name_to_import=name_to_import,
@@ -36,6 +49,8 @@ class Driver(DriverBase):
 
         self._cpu_fraction = cpu_fraction
         self._gpu_fraction = gpu_fraction
+        self._la_uses_gpu = la_uses_gpu
+        self._ps_uses_gpu = ps_uses_gpu
 
         if "h2h" in list(eval_methods.keys()):
             assert EvalAgentDeepCFR.EVAL_MODE_SINGLE in t_prof.eval_modes_of_algo
@@ -50,7 +65,7 @@ class Driver(DriverBase):
                                     t_prof,
                                     i,
                                     self.chief_handle,
-                                    num_gpus=self._gpu_fraction,
+                                    num_gpus=self._gpu_fraction if self._la_uses_gpu else 0,
                                     num_cpus=self._cpu_fraction)
             for i in range(t_prof.n_learner_actors)
         ]
@@ -61,7 +76,7 @@ class Driver(DriverBase):
                                     t_prof,
                                     p,
                                     self.chief_handle,
-                                    num_gpus=self._gpu_fraction,
+                                    num_gpus=self._gpu_fraction if self._ps_uses_gpu else 0,
                                     num_cpus=self._cpu_fraction)
             for p in range(t_prof.n_seats)
         ]

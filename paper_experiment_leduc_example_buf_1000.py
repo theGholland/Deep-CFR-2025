@@ -1,3 +1,4 @@
+import argparse
 from PokerRL.game.games import StandardLeduc
 
 from DeepCFR.EvalAgentDeepCFR import EvalAgentDeepCFR
@@ -5,6 +6,12 @@ from DeepCFR.TrainingProfile import TrainingProfile
 from DeepCFR.workers.driver.Driver import Driver
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--device-training", default="auto")
+    parser.add_argument("--device-parameter-server", default="auto")
+    parser.add_argument("--device-inference", default="auto")
+    args = parser.parse_args()
+
     ctrl = Driver(t_prof=TrainingProfile(name="SD-CFR_LEDUC_BUF_1000",
                                          nn_type="feedforward",
                                          max_buffer_size_adv=1e6,
@@ -33,6 +40,9 @@ if __name__ == '__main__':
 
                                          DISTRIBUTED=False,
                                          log_verbose=False,
+                                         device_training=args.device_training,
+                                         device_parameter_server=args.device_parameter_server,
+                                         device_inference=args.device_inference,
                                          ),
                   eval_methods={
                       "br": 15,

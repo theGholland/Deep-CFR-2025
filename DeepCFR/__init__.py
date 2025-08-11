@@ -30,7 +30,7 @@ try:  # pragma: no cover - best effort patching
             # declared explicitly.
             ray_init_kwargs = {
                 "object_store_memory": min(
-                    2 * (10 ** 10), int(psutil.virtual_memory().total * 0.4)
+                    2 * (10 ** 10), int(psutil.virtual_memory().total * 0.8)
                 ),
                 "num_cpus": psutil.cpu_count() or 1,
                 # Enable Ray's web dashboard so users can monitor resource usage
@@ -55,7 +55,7 @@ try:  # pragma: no cover - best effort patching
     MaybeRay._default_num_cpus = 1
     MaybeRay._default_num_gpus = 0
 
-    def _create_worker(self, cls, *args, num_gpus=None, num_cpus=None):
+    def _create_worker(self, cls, *args, num_gpus=None, num_cpus=None, memory=None):
         """Create a Ray actor with optional resource allocation."""
         if self.runs_distributed:
             if num_gpus is None:
@@ -65,7 +65,10 @@ try:  # pragma: no cover - best effort patching
                     num_gpus = 0
             if num_cpus is None:
                 num_cpus = getattr(self, "_default_num_cpus", 1)
-            return cls.options(num_gpus=num_gpus, num_cpus=num_cpus).remote(*args)
+            options_kwargs = {"num_gpus": num_gpus, "num_cpus": num_cpus}
+            if memory is not None:
+                options_kwargs["memory"] = memory
+            return cls.options(**options_kwargs).remote(*args)
         return cls(*args)
 
     MaybeRay.create_worker = _create_worker

@@ -234,7 +234,7 @@ class TrainingProfile(TrainingProfileBase):
                 ),
                 "lbr": lbr_args,
                 "rlbr": rl_br_args,
-            "h2h": h2h_args,
+                "h2h": h2h_args,
             }
         )
 

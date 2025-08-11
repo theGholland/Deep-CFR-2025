@@ -2,6 +2,10 @@
 
 
 import copy
+import os
+import re
+import shutil
+from datetime import datetime
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -230,9 +234,16 @@ class TrainingProfile(TrainingProfileBase):
                 ),
                 "lbr": lbr_args,
                 "rlbr": rl_br_args,
-                "h2h": h2h_args,
+            "h2h": h2h_args,
             }
         )
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        sanitized_name = re.sub(r"[^\w.-]", "_", str(self.name))
+        self.path_log_storage = os.path.join(self._data_path, "tensorboard", sanitized_name, timestamp)
+        if os.path.exists(self.path_log_storage):
+            shutil.rmtree(self.path_log_storage)
+        os.makedirs(self.path_log_storage, exist_ok=True)
 
         self.nn_type = nn_type
         self.online = online

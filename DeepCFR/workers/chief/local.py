@@ -1,9 +1,12 @@
 import copy
 import os
 import pickle
+import re
+import shutil
 from os.path import join as ospj
 
 import psutil
+from torch.utils.tensorboard import SummaryWriter
 
 from DeepCFR.IterationStrategy import IterationStrategy
 from DeepCFR.EvalAgentDeepCFR import EvalAgentDeepCFR
@@ -38,7 +41,7 @@ class Chief(_ChiefBase):
             ]
 
             if self._t_prof.log_verbose:
-                self._exp_mem_usage = self.create_experiment(self._t_prof.name + " Chief_Memory_Usage")
+                self._exp_mem_usage = self.create_experiment("Chief/Memory_Usage")
 
     def set_la_handles(self, *la_handles):
         self._la_handles = list(la_handles)
@@ -48,6 +51,17 @@ class Chief(_ChiefBase):
 
     def update_alive_las(self, alive_la_handles):
         self._la_handles = alive_la_handles
+
+    # __________________________________________________ Logging API ___________________________________________________
+    def create_experiment(self, name):
+        sanitized = re.sub(r"[^\w.-]", "_", name)
+        log_dir = ospj(self._t_prof.path_log_storage, sanitized)
+        if os.path.exists(log_dir):
+            shutil.rmtree(log_dir)
+        return SummaryWriter(log_dir=log_dir)
+
+    def add_scalar(self, writer, graph_name, step, value):
+        writer.add_scalar(graph_name, value, step)
 
     # ____________________________________________________ Strategy ____________________________________________________
     def pull_current_eval_strategy(self, last_iteration_receiver_has):

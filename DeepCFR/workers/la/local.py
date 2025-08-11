@@ -105,22 +105,26 @@ class LearnerActor(WorkerBase):
         if self._t_prof.log_verbose:
             self._exp_perf = self._ray.get(
                 self._ray.remote(self._chief_handle.create_experiment,
-                                 self._t_prof.name + "_LA" + str(worker_id) + "_Perf"))
+                                 f"LA{worker_id}/Perf"))
             self._exp_mem_usage = self._ray.get(
                 self._ray.remote(self._chief_handle.create_experiment,
-                                 self._t_prof.name + "_LA" + str(worker_id) + "_Memory_Usage"))
+                                 f"LA{worker_id}/Memory_Usage"))
             self._exps_adv_buffer_size = self._ray.get(
                 [
-                    self._ray.remote(self._chief_handle.create_experiment,
-                                     self._t_prof.name + "_LA" + str(worker_id) + "_P" + str(p) + "_ADV_BufSize")
+                    self._ray.remote(
+                        self._chief_handle.create_experiment,
+                        f"LA{worker_id}/P{p}/ADV_BufSize",
+                    )
                     for p in range(self._t_prof.n_seats)
                 ]
             )
             if self._AVRG:
                 self._exps_avrg_buffer_size = self._ray.get(
                     [
-                        self._ray.remote(self._chief_handle.create_experiment,
-                                         self._t_prof.name + "_LA" + str(worker_id) + "_P" + str(p) + "_AVRG_BufSize")
+                        self._ray.remote(
+                            self._chief_handle.create_experiment,
+                            f"LA{worker_id}/P{p}/AVRG_BufSize",
+                        )
                         for p in range(self._t_prof.n_seats)
                     ]
                 )

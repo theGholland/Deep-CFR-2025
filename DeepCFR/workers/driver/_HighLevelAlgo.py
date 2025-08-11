@@ -82,11 +82,13 @@ class HighLevelAlgo(_HighLevelAlgoBase):
 
         # For logging the loss to see convergence in Tensorboard
         if self._t_prof.log_verbose:
-            exp_loss_each_p = [self._ray.remote(self._chief_handle.create_experiment,
-                                                self._t_prof.name + "_ADV_Loss_P" + str(p) + "_I" + str(
-                                                    cfr_iter))
-                               for p in range(self._t_prof.n_seats)
-                               ]
+            exp_loss_each_p = [
+                self._ray.remote(
+                    self._chief_handle.create_experiment,
+                    f"P{p}/Adv_Loss_I{cfr_iter}",
+                )
+                for p in range(self._t_prof.n_seats)
+            ]
 
         self._ray.wait([
             self._ray.remote(self._ps_handles[p_id].reset_adv_net, cfr_iter)
@@ -244,11 +246,13 @@ class HighLevelAlgo(_HighLevelAlgoBase):
 
         # For logging the loss to see convergence in Tensorboard
         if self._t_prof.log_verbose:
-            exp_loss_each_p = [self._ray.remote(self._chief_handle.create_experiment,
-                                                self._t_prof.name + "_AverageNet_Loss_P" + str(p) + "_I" + str(
-                                                    cfr_iter))
-                               for p in range(self._t_prof.n_seats)
-                               ]
+            exp_loss_each_p = [
+                self._ray.remote(
+                    self._chief_handle.create_experiment,
+                    f"P{p}/Avrg_Loss_I{cfr_iter}",
+                )
+                for p in range(self._t_prof.n_seats)
+            ]
 
         self._ray.wait([self._ray.remote(self._ps_handles[p_id].reset_avrg_net)])
         self._update_leaner_actors(update_avrg_for_plyrs=[p_id])

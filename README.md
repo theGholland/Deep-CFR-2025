@@ -111,6 +111,15 @@ python leduc_example.py --device-training cuda:0 --device-parameter-server cuda:
 Note that you can specify one or both averaging methods under `eval_modes_of_algo`.
 Choosing both is useful to compare them as they will share the value networks! However, we showed in [2] that SD-CFR
 is expected to perform better, is faster, and requires less memory.
+
+### Monitoring per-actor resource utilization
+Each `LearnerActor` now records the wall-clock time, CPU usage, and (when training on CUDA) the GPU memory
+and utilization consumed by its `generate_data` and `update` loops.  These statistics are aggregated and written to
+TensorBoard via `GenerateData/*` and `Update/*` tags in the corresponding `*_Perf` experiment for each actor.
+
+To tune performance, watch these graphs while adjusting the `TrainingProfile`'s `num_cpus` and `num_gpus` values per
+actor.  Underutilized CPUs or GPUs suggest lowering the respective counts to schedule more actors, whereas sustained
+values near 100% indicate a need for more resources or fewer workers per machine.
                                          
 
 ## Cloud & Clusters

@@ -1,7 +1,9 @@
 import os
 import pickle
+import time
 
 import psutil
+import torch
 
 from DeepCFR.IterationStrategy import IterationStrategy
 from DeepCFR.EvalAgentDeepCFR import EvalAgentDeepCFR
@@ -82,7 +84,28 @@ class LearnerActor(WorkerBase):
             else:
                 raise ValueError("Currently we don't support", self._t_prof.sampler.lower(), "sampling.")
 
+        self._gpu_device = None
+        devices = [self._adv_args.device_training]
+        if self._AVRG:
+            devices.append(self._avrg_args.device_training)
+        for dev in devices:
+            if isinstance(dev, torch.device) and dev.type == "cuda":
+                self._gpu_device = dev
+                break
+            if isinstance(dev, str) and dev.startswith("cuda"):
+                self._gpu_device = torch.device(dev)
+                break
+
+        self._perf_log_interval = 10
+        self._perf_metrics = {
+            "generate_data": {"time": 0.0, "cpu": 0.0, "gpu_mem": 0.0, "gpu_util": 0.0, "count": 0, "total": 0},
+            "update": {"time": 0.0, "cpu": 0.0, "gpu_mem": 0.0, "gpu_util": 0.0, "count": 0, "total": 0},
+        }
+
         if self._t_prof.log_verbose:
+            self._exp_perf = self._ray.get(
+                self._ray.remote(self._chief_handle.create_experiment,
+                                 self._t_prof.name + "_LA" + str(worker_id) + "_Perf"))
             self._exp_mem_usage = self._ray.get(
                 self._ray.remote(self._chief_handle.create_experiment,
                                  self._t_prof.name + "_LA" + str(worker_id) + "_Memory_Usage"))
@@ -103,6 +126,10 @@ class LearnerActor(WorkerBase):
                 )
 
     def generate_data(self, traverser, cfr_iter):
+        process = psutil.Process(os.getpid())
+        process.cpu_percent()
+        t_start = time.perf_counter()
+
         iteration_strats = [
             IterationStrategy(t_prof=self._t_prof, env_bldr=self._env_bldr, owner=p,
                               device=self._t_prof.device_inference, cfr_iter=cfr_iter)
@@ -116,6 +143,36 @@ class LearnerActor(WorkerBase):
                                     iteration_strats=iteration_strats,
                                     cfr_iter=cfr_iter,
                                     )
+
+        duration = time.perf_counter() - t_start
+        cpu = process.cpu_percent()
+        gpu_mem = gpu_util = 0.0
+        if self._gpu_device is not None:
+            gpu_mem = torch.cuda.memory_reserved(self._gpu_device)
+            gpu_util = torch.cuda.utilization(self._gpu_device)
+
+        m = self._perf_metrics["generate_data"]
+        m["time"] += duration
+        m["cpu"] += cpu
+        m["gpu_mem"] += gpu_mem
+        m["gpu_util"] += gpu_util
+        m["count"] += 1
+        m["total"] += 1
+        if self._t_prof.log_verbose and m["count"] >= self._perf_log_interval:
+            avg_time = m["time"] / m["count"]
+            avg_cpu = m["cpu"] / m["count"]
+            self._ray.remote(self._chief_handle.add_scalar,
+                             self._exp_perf, "GenerateData/Time", m["total"], avg_time)
+            self._ray.remote(self._chief_handle.add_scalar,
+                             self._exp_perf, "GenerateData/CPU", m["total"], avg_cpu)
+            if self._gpu_device is not None:
+                avg_mem = m["gpu_mem"] / m["count"]
+                avg_util = m["gpu_util"] / m["count"]
+                self._ray.remote(self._chief_handle.add_scalar,
+                                 self._exp_perf, "GenerateData/GPUMem", m["total"], avg_mem)
+                self._ray.remote(self._chief_handle.add_scalar,
+                                 self._exp_perf, "GenerateData/GPUUtil", m["total"], avg_util)
+            m.update({"time": 0.0, "cpu": 0.0, "gpu_mem": 0.0, "gpu_util": 0.0, "count": 0})
 
         # Log after both players generated data
         if self._t_prof.log_verbose and traverser == 1 and (cfr_iter % 3 == 0):
@@ -146,6 +203,10 @@ class LearnerActor(WorkerBase):
                                                         in order of their seat_ids. This allows updating only some
                                                         players.
         """
+        process = psutil.Process(os.getpid())
+        process.cpu_percent()
+        t_start = time.perf_counter()
+
         for p_id in range(self._t_prof.n_seats):
             if adv_state_dicts[p_id] is not None:
                 self._adv_wrappers[p_id].load_net_state_dict(
@@ -156,6 +217,36 @@ class LearnerActor(WorkerBase):
                 self._avrg_wrappers[p_id].load_net_state_dict(
                     state_dict=self._ray.state_dict_to_torch(self._ray.get(avrg_state_dicts[p_id]),
                                                              device=self._avrg_wrappers[p_id].device))
+
+        duration = time.perf_counter() - t_start
+        cpu = process.cpu_percent()
+        gpu_mem = gpu_util = 0.0
+        if self._gpu_device is not None:
+            gpu_mem = torch.cuda.memory_reserved(self._gpu_device)
+            gpu_util = torch.cuda.utilization(self._gpu_device)
+
+        m = self._perf_metrics["update"]
+        m["time"] += duration
+        m["cpu"] += cpu
+        m["gpu_mem"] += gpu_mem
+        m["gpu_util"] += gpu_util
+        m["count"] += 1
+        m["total"] += 1
+        if self._t_prof.log_verbose and m["count"] >= self._perf_log_interval:
+            avg_time = m["time"] / m["count"]
+            avg_cpu = m["cpu"] / m["count"]
+            self._ray.remote(self._chief_handle.add_scalar,
+                             self._exp_perf, "Update/Time", m["total"], avg_time)
+            self._ray.remote(self._chief_handle.add_scalar,
+                             self._exp_perf, "Update/CPU", m["total"], avg_cpu)
+            if self._gpu_device is not None:
+                avg_mem = m["gpu_mem"] / m["count"]
+                avg_util = m["gpu_util"] / m["count"]
+                self._ray.remote(self._chief_handle.add_scalar,
+                                 self._exp_perf, "Update/GPUMem", m["total"], avg_mem)
+                self._ray.remote(self._chief_handle.add_scalar,
+                                 self._exp_perf, "Update/GPUUtil", m["total"], avg_util)
+            m.update({"time": 0.0, "cpu": 0.0, "gpu_mem": 0.0, "gpu_util": 0.0, "count": 0})
 
     def get_loss_last_batch_adv(self, p_id):
         return self._adv_wrappers[p_id].loss_last_batch

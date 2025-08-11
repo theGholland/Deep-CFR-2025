@@ -1,9 +1,15 @@
 from DeepCFR.EvalAgentDeepCFR import EvalAgentDeepCFR
 from DeepCFR.workers.driver._HighLevelAlgo import HighLevelAlgo
-from PokerRL.rl.base_cls.workers.DriverBase import DriverBase
+from PokerRL._.TensorboardLogger import TensorboardLogger
 from PokerRL.rl.MaybeRay import MaybeRay
+from PokerRL.rl.base_cls.workers.DriverBase import DriverBase
+import os
+import socket
+import subprocess
 import psutil
+import ray
 import torch
+from torch.utils.tensorboard import SummaryWriter
 
 
 class Driver(DriverBase):
@@ -50,6 +56,60 @@ class Driver(DriverBase):
         super().__init__(t_prof=t_prof, eval_methods=eval_methods, n_iterations=n_iterations,
                          iteration_to_import=iteration_to_import, name_to_import=name_to_import,
                          chief_cls=Chief, eval_agent_cls=EvalAgentDeepCFR)
+
+        # Determine Ray's log directory and configure TensorBoard
+        try:
+            ray_log_root = ray._private.worker.global_node.get_logs_dir()
+        except Exception:
+            from ray._private.utils import get_ray_temp_dir
+
+            ray_log_root = get_ray_temp_dir()
+
+        t_prof.path_log_storage = os.path.join(ray_log_root, "tensorboard")
+        os.makedirs(t_prof.path_log_storage, exist_ok=True)
+
+        if getattr(t_prof, "tb_writer", None) is not None:
+            try:
+                t_prof.tb_writer.close()
+            except Exception:
+                pass
+        t_prof.tb_writer = SummaryWriter(log_dir=t_prof.path_log_storage) if t_prof.log_verbose else None
+
+        # Recreate logger with updated path
+        self.logger = TensorboardLogger(
+            name=t_prof.name,
+            chief_handle=self.chief_handle,
+            path_log_storage=t_prof.path_log_storage,
+            runs_distributed=t_prof.DISTRIBUTED,
+            runs_cluster=t_prof.CLUSTER,
+        )
+
+        def _get_free_port():
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("", 0))
+                return s.getsockname()[1]
+
+        tb_port = _get_free_port()
+        tb_cmd = [
+            "tensorboard",
+            "--logdir",
+            t_prof.path_log_storage,
+            "--host",
+            "0.0.0.0",
+            "--port",
+            str(tb_port),
+        ]
+        try:
+            self._tb_proc = subprocess.Popen(
+                tb_cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
+            )
+            self._tb_port = tb_port
+            print(f"TensorBoard listening on http://0.0.0.0:{tb_port}/")
+        except Exception as ex:
+            self._tb_proc = None
+            print(f"Failed to start TensorBoard: {ex}")
 
         self._cpu_fraction = cpu_fraction
         self._gpu_fraction = gpu_fraction
@@ -117,53 +177,61 @@ class Driver(DriverBase):
         self.algo.init()
 
         print("Starting Training...")
-        for _iter_nr in range(10000000 if self.n_iterations is None else self.n_iterations):
-            print("Iteration: ", self._cfr_iter)
-
-            # """"""""""""""""
-            # Maybe train AVRG
-            # """"""""""""""""
-            avrg_times = None
-            if self._AVRG and self._any_eval_needs_avrg_net():
-                avrg_times = self.algo.train_average_nets(cfr_iter=_iter_nr)
-
-            # """"""""""""""""
-            # Eval
-            # """"""""""""""""
-            # Evaluate. Sync & Lock, then train while evaluating on other workers
-            self.evaluate()
-
-            # """"""""""""""""
-            # Log
-            # """"""""""""""""
-            if self._cfr_iter % self._t_prof.log_export_freq == 0:
-                self.save_logs()
-            self.periodically_export_eval_agent()
-
-            # """"""""""""""""
-            # Iteration
-            # """"""""""""""""
-            iter_times = self.algo.run_one_iter_alternating_update(cfr_iter=self._cfr_iter)
-
-            print(
-                "Generating Data: ", str(iter_times["t_generating_data"]) + "s.",
-                "  ||  Trained ADV", str(iter_times["t_computation_adv"]) + "s.",
-                "  ||  Synced ADV", str(iter_times["t_syncing_adv"]) + "s.",
-                "\n"
-            )
-            if self._AVRG and avrg_times:
+        try:
+            for _iter_nr in range(10000000 if self.n_iterations is None else self.n_iterations):
+                print("Iteration: ", self._cfr_iter)
+    
+                # """"""""""""""""
+                # Maybe train AVRG
+                # """"""""""""""""
+                avrg_times = None
+                if self._AVRG and self._any_eval_needs_avrg_net():
+                    avrg_times = self.algo.train_average_nets(cfr_iter=_iter_nr)
+    
+                # """"""""""""""""
+                # Eval
+                # """"""""""""""""
+                # Evaluate. Sync & Lock, then train while evaluating on other workers
+                self.evaluate()
+    
+                # """"""""""""""""
+                # Log
+                # """"""""""""""""
+                if self._cfr_iter % self._t_prof.log_export_freq == 0:
+                    self.save_logs()
+                self.periodically_export_eval_agent()
+    
+                # """"""""""""""""
+                # Iteration
+                # """"""""""""""""
+                iter_times = self.algo.run_one_iter_alternating_update(cfr_iter=self._cfr_iter)
+    
                 print(
-                    "Trained AVRG", str(avrg_times["t_computation_avrg"]) + "s.",
-                    "  ||  Synced AVRG", str(avrg_times["t_syncing_avrg"]) + "s.",
+                    "Generating Data: ", str(iter_times["t_generating_data"]) + "s.",
+                    "  ||  Trained ADV", str(iter_times["t_computation_adv"]) + "s.",
+                    "  ||  Synced ADV", str(iter_times["t_syncing_adv"]) + "s.",
                     "\n"
                 )
-
-            self._cfr_iter += 1
-
-            # """"""""""""""""
-            # Checkpoint
-            # """"""""""""""""
-            self.periodically_checkpoint()
+                if self._AVRG and avrg_times:
+                    print(
+                        "Trained AVRG", str(avrg_times["t_computation_avrg"]) + "s.",
+                        "  ||  Synced AVRG", str(avrg_times["t_syncing_avrg"]) + "s.",
+                        "\n"
+                    )
+    
+                self._cfr_iter += 1
+    
+                # """"""""""""""""
+                # Checkpoint
+                # """"""""""""""""
+                self.periodically_checkpoint()
+        finally:
+            if getattr(self, "_tb_proc", None):
+                self._tb_proc.terminate()
+                try:
+                    self._tb_proc.wait(timeout=5)
+                except Exception:
+                    pass
 
     def _any_eval_needs_avrg_net(self):
         for e in list(self.eval_masters.values()):

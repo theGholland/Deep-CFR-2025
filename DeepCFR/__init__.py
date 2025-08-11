@@ -44,15 +44,21 @@ try:  # pragma: no cover - best effort patching
             ray.init(**ray_init_kwargs)
     MaybeRay.init_local = _init_local
 
-    def _create_worker(self, cls, *args, num_gpus=None):
-        """Create a Ray actor with optional fractional GPU allocation."""
+    # Default CPU fraction per worker.  This can be overridden at runtime by
+    # setting ``MaybeRay._default_num_cpus`` before creating any actors.
+    MaybeRay._default_num_cpus = 1
+
+    def _create_worker(self, cls, *args, num_gpus=None, num_cpus=None):
+        """Create a Ray actor with optional resource allocation."""
         if self.runs_distributed:
             if num_gpus is None:
                 try:
                     num_gpus = 1 if torch.cuda.is_available() else 0
                 except Exception:  # pragma: no cover - best effort GPU detection
                     num_gpus = 0
-            return cls.options(num_gpus=num_gpus).remote(*args)
+            if num_cpus is None:
+                num_cpus = getattr(self, "_default_num_cpus", 1)
+            return cls.options(num_gpus=num_gpus, num_cpus=num_cpus).remote(*args)
         return cls(*args)
 
     MaybeRay.create_worker = _create_worker

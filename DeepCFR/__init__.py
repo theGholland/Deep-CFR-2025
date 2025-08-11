@@ -33,7 +33,7 @@ try:  # pragma: no cover - best effort patching
                     2 * (10 ** 10), int(psutil.virtual_memory().total * 0.4)
                 ),
                 "num_cpus": psutil.cpu_count() or 1,
-                "include_dashboard": True,
+                "include_dashboard": False,
             }
 
             try:

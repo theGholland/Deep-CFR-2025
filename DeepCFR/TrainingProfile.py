@@ -17,6 +17,13 @@ from DeepCFR.workers.la.AdvWrapper import AdvTrainingArgs
 from DeepCFR.workers.la.AvrgWrapper import AvrgTrainingArgs
 
 
+def _resolve_device(dev):
+    """Translate special device strings."""
+    if isinstance(dev, str) and dev.lower() == "auto":
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    return dev
+
+
 class TrainingProfile(TrainingProfileBase):
 
     def __init__(self,
@@ -118,6 +125,10 @@ class TrainingProfile(TrainingProfileBase):
 
                  ):
         print(" ************************** Initing args for: ", name, "  **************************")
+
+        device_inference = _resolve_device(device_inference)
+        device_training = _resolve_device(device_training)
+        device_parameter_server = _resolve_device(device_parameter_server)
 
         if nn_type == "recurrent":
             from PokerRL.rl.neural.MainPokerModuleRNN import MPMArgsRNN

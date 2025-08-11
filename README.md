@@ -96,6 +96,15 @@ if __name__ == '__main__':
                   })
     ctrl.run()
 ```
+
+### Selecting GPU devices
+Training scripts accept `--device-training`, `--device-parameter-server`, and `--device-inference` flags.
+Each flag takes `cpu`, `cuda`, `cuda:<id>`, or `auto` (the default). When set to a CUDA device the
+corresponding Ray worker reserves GPU resources; otherwise it runs on the CPU. Example:
+
+```
+python leduc_example.py --device-training cuda:0 --device-parameter-server cuda:0 --device-inference cuda:0
+```
 Note that you can specify one or both averaging methods under `eval_modes_of_algo`.
 Choosing both is useful to compare them as they will share the value networks! However, we showed in [2] that SD-CFR
 is expected to perform better, is faster, and requires less memory.

@@ -1,3 +1,4 @@
+import argparse
 from PokerRL.eval.head_to_head.H2HArgs import H2HArgs
 from PokerRL.game.games import Flop5Holdem
 
@@ -8,9 +9,15 @@ from DeepCFR.workers.driver.Driver import Driver
 if __name__ == '__main__':
     """
     Runs the experiment from The paper "Single Deep Counterfactual Regret Minimization" (Steinberger 2019).
-    
+
     Uses 24 cores.
     """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--device-training", default="auto")
+    parser.add_argument("--device-parameter-server", default="auto")
+    parser.add_argument("--device-inference", default="auto")
+    args = parser.parse_args()
+
     ctrl = Driver(t_prof=TrainingProfile(name="EXPERIMENT_SD-CFR_vs_Deep-CFR_FHP",
 
                                          nn_type="feedforward",  # We also support RNNs, but the paper uses FF
@@ -66,6 +73,9 @@ if __name__ == '__main__':
                                          h2h_args=H2HArgs(
                                              n_hands=1500000,  # this is per seat; so in total 3M hands per eval
                                          ),
+                                         device_training=args.device_training,
+                                         device_parameter_server=args.device_parameter_server,
+                                         device_inference=args.device_inference,
                                          ),
                   # Evaluate Head-to-Head every 15 iterations of both players (= every 30 alternating iterations)
                   eval_methods={"h2h": 15},

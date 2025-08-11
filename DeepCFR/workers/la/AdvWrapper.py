@@ -15,6 +15,7 @@ class AdvWrapper(_NetWrapperBase):
             owner=owner,
             device=device
         )
+        self._batch_size = adv_training_args.batch_size
 
     def get_advantages(self, pub_obses, range_idxs, legal_action_mask):
         self._net.eval()
@@ -27,7 +28,7 @@ class AdvWrapper(_NetWrapperBase):
         batch_legal_action_masks, \
         batch_adv, \
         batch_loss_weight, \
-            = buffer.sample(device=self.device, batch_size=self._args.batch_size)
+            = buffer.sample(device=self.device, batch_size=self._batch_size)
 
         # [batch_size, n_actions]
         adv_pred = self._net(pub_obses=batch_pub_obs,

@@ -18,6 +18,7 @@ class AvrgWrapper(_NetWrapperBase):
             device=device
         )
         self._all_range_idxs = torch.arange(self._env_bldr.rules.RANGE_SIZE, device=self.device, dtype=torch.long)
+        self._batch_size = avrg_training_args.batch_size
 
     def get_a_probs(self, pub_obses, range_idxs, legal_actions_lists):
         """
@@ -60,7 +61,7 @@ class AvrgWrapper(_NetWrapperBase):
         batch_legal_action_masks, \
         batch_a_probs, \
         batch_loss_weight, \
-            = buffer.sample(device=self.device, batch_size=self._args.batch_size)
+            = buffer.sample(device=self.device, batch_size=self._batch_size)
 
         # [batch_size, n_actions]
         strat_pred = self._net(pub_obses=batch_pub_obs,

@@ -15,6 +15,7 @@ from PokerRL.rl.neural.DuelingQNet import DuelingQArgs
 from DeepCFR.EvalAgentDeepCFR import EvalAgentDeepCFR
 from DeepCFR.workers.la.AdvWrapper import AdvTrainingArgs
 from DeepCFR.workers.la.AvrgWrapper import AvrgTrainingArgs
+from utils.memory import estimate_batch_size
 
 
 def _resolve_device(dev):
@@ -80,7 +81,7 @@ class TrainingProfile(TrainingProfileBase):
                  n_cards_state_units_adv=96,
                  n_merge_and_table_layer_units_adv=32,
                  n_units_final_adv=64,
-                 mini_batch_size_adv=4096,
+                 mini_batch_size_adv=None,
                  n_mini_batches_per_la_per_update_adv=1,
                  optimizer_adv="adam",
                  loss_adv="weighted_mse",
@@ -103,7 +104,7 @@ class TrainingProfile(TrainingProfileBase):
                  n_cards_state_units_avrg=96,
                  n_merge_and_table_layer_units_avrg=32,
                  n_units_final_avrg=64,
-                 mini_batch_size_avrg=4096,
+                 mini_batch_size_avrg=None,
                  n_mini_batches_per_la_per_update_avrg=1,
                  loss_avrg="weighted_mse",
                  optimizer_avrg="adam",
@@ -129,6 +130,13 @@ class TrainingProfile(TrainingProfileBase):
         device_inference = _resolve_device(device_inference)
         device_training = _resolve_device(device_training)
         device_parameter_server = _resolve_device(device_parameter_server)
+
+        if mini_batch_size_adv is None or mini_batch_size_avrg is None:
+            est = estimate_batch_size()
+            if mini_batch_size_adv is None:
+                mini_batch_size_adv = est
+            if mini_batch_size_avrg is None:
+                mini_batch_size_avrg = est
 
         if nn_type == "recurrent":
             from PokerRL.rl.neural.MainPokerModuleRNN import MPMArgsRNN
@@ -231,7 +239,7 @@ class TrainingProfile(TrainingProfileBase):
                 "lbr": lbr_args,
                 "rlbr": rl_br_args,
                 "h2h": h2h_args,
-            }
+            } 
         )
 
         self.nn_type = nn_type
@@ -242,6 +250,9 @@ class TrainingProfile(TrainingProfileBase):
         self.n_actions_traverser_samples = n_actions_traverser_samples
 
         self.tb_writer = SummaryWriter(log_dir=self.path_log_storage)
+
+        self.mini_batch_size_adv = mini_batch_size_adv
+        self.mini_batch_size_avrg = mini_batch_size_avrg
 
         # SINGLE
         self.export_each_net = export_each_net

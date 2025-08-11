@@ -25,7 +25,7 @@ class ParameterServer(ParameterServerBase):
         if self._t_prof.log_verbose:
             self._exp_mem_usage = self._ray.get(
                 self._ray.remote(self._chief_handle.create_experiment,
-                                 self._t_prof.name + "_PS" + str(owner) + "_Memory_Usage"))
+                                 f"PS{owner}/Memory_Usage"))
 
         self._AVRG = EvalAgentDeepCFR.EVAL_MODE_AVRG_NET in self._t_prof.eval_modes_of_algo
         self._SINGLE = EvalAgentDeepCFR.EVAL_MODE_SINGLE in self._t_prof.eval_modes_of_algo

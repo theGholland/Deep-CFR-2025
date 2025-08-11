@@ -33,7 +33,12 @@ try:  # pragma: no cover - best effort patching
                     2 * (10 ** 10), int(psutil.virtual_memory().total * 0.4)
                 ),
                 "num_cpus": psutil.cpu_count() or 1,
-                "include_dashboard": False,
+                # Enable Ray's web dashboard so users can monitor resource usage
+                # and task progress at http://localhost:8265.  We bind to
+                # ``0.0.0.0`` so the dashboard is reachable when running on a
+                # remote machine.
+                "include_dashboard": True,
+                "dashboard_host": "0.0.0.0",
             }
 
             try:

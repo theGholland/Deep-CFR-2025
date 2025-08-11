@@ -1,6 +1,6 @@
 numpy==2.3.2
 psutil==7.0.0
-ray>=2.0
+ray[default]>=2.0
 torch==2.8.0
 PokerRL @ git+https://github.com/theGholland/PokerRL-2025.git
 tensorboard==2.20.0

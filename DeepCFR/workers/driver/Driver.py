@@ -19,21 +19,23 @@ class Driver(DriverBase):
             from DeepCFR.workers.ps.local import ParameterServer
 
         total_cpu = psutil.cpu_count() or 1
-        desired_actors = t_prof.n_learner_actors + t_prof.n_seats + 1  # +1 for Chief
+        desired_actors = t_prof.n_learner_actors + t_prof.n_seats + len(eval_methods) + 1  # +1 for Chief
         cpu_fraction = total_cpu / desired_actors
         MaybeRay._default_num_cpus = cpu_fraction
+
+        if torch.cuda.is_available():
+            total_gpu = torch.cuda.device_count()
+            gpu_fraction = min(1.0, total_gpu / (t_prof.n_learner_actors + t_prof.n_seats + len(eval_methods)))
+        else:
+            gpu_fraction = 0
+        MaybeRay._default_num_gpus = gpu_fraction
 
         super().__init__(t_prof=t_prof, eval_methods=eval_methods, n_iterations=n_iterations,
                          iteration_to_import=iteration_to_import, name_to_import=name_to_import,
                          chief_cls=Chief, eval_agent_cls=EvalAgentDeepCFR)
 
         self._cpu_fraction = cpu_fraction
-
-        if torch.cuda.is_available():
-            total_gpu = torch.cuda.device_count()
-            self._gpu_fraction = min(1.0, total_gpu / (t_prof.n_learner_actors + t_prof.n_seats))
-        else:
-            self._gpu_fraction = 0
+        self._gpu_fraction = gpu_fraction
 
         if "h2h" in list(eval_methods.keys()):
             assert EvalAgentDeepCFR.EVAL_MODE_SINGLE in t_prof.eval_modes_of_algo

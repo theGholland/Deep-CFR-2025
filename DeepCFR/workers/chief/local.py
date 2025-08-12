@@ -24,6 +24,10 @@ class Chief(_ChiefBase):
         self._la_handles = None
         self._env_bldr = rl_util.get_env_builder(t_prof=t_prof)
 
+        # SummaryWriter handles
+        self._writers = {}
+        self._next_writer_handle = 0
+
         self._SINGLE = EvalAgentDeepCFR.EVAL_MODE_SINGLE in self._t_prof.eval_modes_of_algo
         self._AVRG = EvalAgentDeepCFR.EVAL_MODE_AVRG_NET in self._t_prof.eval_modes_of_algo
 
@@ -41,7 +45,7 @@ class Chief(_ChiefBase):
             ]
 
             if self._t_prof.log_verbose:
-                self._exp_mem_usage = self.create_experiment("Chief/Memory_Usage")
+                self._exp_mem_usage_handle = self.create_experiment("Chief/Memory_Usage")
 
     def set_la_handles(self, *la_handles):
         self._la_handles = list(la_handles)
@@ -58,10 +62,14 @@ class Chief(_ChiefBase):
         log_dir = ospj(self._t_prof.path_log_storage, sanitized)
         if os.path.exists(log_dir):
             shutil.rmtree(log_dir)
-        return SummaryWriter(log_dir=log_dir)
+        writer = SummaryWriter(log_dir=log_dir)
+        handle = self._next_writer_handle
+        self._next_writer_handle += 1
+        self._writers[handle] = writer
+        return handle
 
-    def add_scalar(self, writer, graph_name, step, value):
-        writer.add_scalar(graph_name, value, step)
+    def add_scalar(self, handle, graph_name, step, value):
+        self._writers[handle].add_scalar(graph_name, value, step)
 
     # ____________________________________________________ Strategy ____________________________________________________
     def pull_current_eval_strategy(self, last_iteration_receiver_has):
@@ -145,7 +153,7 @@ class Chief(_ChiefBase):
             if owner == 1:
                 # Logs
                 process = psutil.Process(os.getpid())
-                self.add_scalar(self._exp_mem_usage, "Debug/Memory Usage/Chief", cfr_iter, process.memory_info().rss)
+                self.add_scalar(self._exp_mem_usage_handle, "Debug/Memory Usage/Chief", cfr_iter, process.memory_info().rss)
 
     # ________________________________ Store a pickled API class to play against the AI ________________________________
     def export_agent(self, step):

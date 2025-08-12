@@ -82,7 +82,7 @@ class HighLevelAlgo(_HighLevelAlgoBase):
 
         # For logging the loss to see convergence in Tensorboard
         if self._t_prof.log_verbose:
-            exp_loss_each_p = [
+            exp_loss_each_p_handles = [
                 self._ray.remote(
                     self._chief_handle.create_experiment,
                     f"P{p}/Adv_Loss_I{cfr_iter}",
@@ -126,7 +126,7 @@ class HighLevelAlgo(_HighLevelAlgoBase):
             if self._t_prof.log_verbose and ((epoch_nr + 1) % SMOOTHING == 0):
                 self._ray.wait([
                     self._ray.remote(self._chief_handle.add_scalar,
-                                     exp_loss_each_p[p_id], "DCFR_NN_Losses/Advantage", epoch_nr,
+                                     exp_loss_each_p_handles[p_id], "DCFR_NN_Losses/Advantage", epoch_nr,
                                      accumulated_averaged_loss / SMOOTHING)
                 ])
                 accumulated_averaged_loss = 0.0
@@ -246,7 +246,7 @@ class HighLevelAlgo(_HighLevelAlgoBase):
 
         # For logging the loss to see convergence in Tensorboard
         if self._t_prof.log_verbose:
-            exp_loss_each_p = [
+            exp_loss_each_p_handles = [
                 self._ray.remote(
                     self._chief_handle.create_experiment,
                     f"P{p}/Avrg_Loss_I{cfr_iter}",
@@ -290,7 +290,7 @@ class HighLevelAlgo(_HighLevelAlgoBase):
                 if self._t_prof.log_verbose and ((epoch_nr + 1) % SMOOTHING == 0):
                     self._ray.wait([
                         self._ray.remote(self._chief_handle.add_scalar,
-                                         exp_loss_each_p[p_id], "DCFR_NN_Losses/Average", epoch_nr,
+                                         exp_loss_each_p_handles[p_id], "DCFR_NN_Losses/Average", epoch_nr,
                                          accumulated_averaged_loss / SMOOTHING)
                     ])
                     accumulated_averaged_loss = 0.0

@@ -20,6 +20,7 @@ try:  # pragma: no cover - best effort patching
     import psutil
     import ray
     import torch
+    import numpy as np
     from PokerRL.rl.MaybeRay import MaybeRay
 
     def _init_local(self):
@@ -72,6 +73,28 @@ try:  # pragma: no cover - best effort patching
         return cls(*args)
 
     MaybeRay.create_worker = _create_worker
+
+    def _state_dict_to_torch(self, _dict, device):
+        """Convert numpy arrays in a state dict to writable torch tensors."""
+        new_dict = {}
+        if self.runs_distributed:
+            for k in list(_dict.keys()):
+                if isinstance(_dict[k], np.ndarray):
+                    arr = _dict[k]
+                    if not arr.flags.writeable:
+                        arr = arr.copy()
+                    new_dict[k] = torch.from_numpy(arr)
+                else:
+                    new_dict[k] = _dict[k]
+
+                new_dict[k] = new_dict[k].to(device)
+        else:
+            for k in list(_dict.keys()):
+                new_dict[k] = _dict[k].to(device)
+
+        return new_dict
+
+    MaybeRay.state_dict_to_torch = _state_dict_to_torch
 except Exception:  # noqa: S110
     # Dependencies are optional at import time; if they are missing we simply
     # skip the patch and rely on the original implementation.

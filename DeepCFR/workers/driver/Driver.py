@@ -58,12 +58,36 @@ class Driver(DriverBase):
                          chief_cls=Chief, eval_agent_cls=EvalAgentDeepCFR)
 
         # Determine Ray's log directory and configure TensorBoard
+        #
+        # Ray has changed a number of its internal APIs over time.  Older
+        # versions exposed ``ray._private.worker.global_node`` while newer
+        # releases renamed the attribute to ``_global_node`` and removed the
+        # helper ``get_ray_temp_dir``.  We try a best-effort sequence of
+        # lookups that works across a wide range of Ray versions without
+        # depending on any specific private function.
         try:
-            ray_log_root = ray._private.worker.global_node.get_logs_dir()
+            # Ray >= 1.7 used ``_global_node``.  In some versions the public
+            # ``get_logs_dir`` is still available.
+            ray_log_root = ray._private.worker._global_node.get_logs_dir()
         except Exception:
-            from ray._private.utils import get_ray_temp_dir
+            # Fall back to session_dir/logs which is available on newer Ray
+            # versions.  If this also fails, use Ray's temp directory utility
+            # (``get_temp_dir``) or finally ``tempfile.gettempdir``.
+            try:
+                session_dir = getattr(ray._private.worker._global_node, "address_info", {}).get("session_dir")
+                if session_dir:
+                    ray_log_root = os.path.join(session_dir, "logs")
+                else:
+                    raise RuntimeError("session_dir not available")
+            except Exception:
+                try:
+                    from ray._private.utils import get_temp_dir
 
-            ray_log_root = get_ray_temp_dir()
+                    ray_log_root = get_temp_dir()
+                except Exception:
+                    import tempfile
+
+                    ray_log_root = tempfile.gettempdir()
 
         t_prof.path_log_storage = os.path.join(ray_log_root, "tensorboard")
         os.makedirs(t_prof.path_log_storage, exist_ok=True)

@@ -103,13 +103,13 @@ class LearnerActor(WorkerBase):
         }
 
         if self._t_prof.log_verbose:
-            self._exp_perf = self._ray.get(
+            self._exp_perf_handle = self._ray.get(
                 self._ray.remote(self._chief_handle.create_experiment,
                                  f"LA{worker_id}/Perf"))
-            self._exp_mem_usage = self._ray.get(
+            self._exp_mem_usage_handle = self._ray.get(
                 self._ray.remote(self._chief_handle.create_experiment,
                                  f"LA{worker_id}/Memory_Usage"))
-            self._exps_adv_buffer_size = self._ray.get(
+            self._exps_adv_buffer_size_handles = self._ray.get(
                 [
                     self._ray.remote(
                         self._chief_handle.create_experiment,
@@ -119,7 +119,7 @@ class LearnerActor(WorkerBase):
                 ]
             )
             if self._AVRG:
-                self._exps_avrg_buffer_size = self._ray.get(
+                self._exps_avrg_buffer_size_handles = self._ray.get(
                     [
                         self._ray.remote(
                             self._chief_handle.create_experiment,
@@ -166,32 +166,32 @@ class LearnerActor(WorkerBase):
             avg_time = m["time"] / m["count"]
             avg_cpu = m["cpu"] / m["count"]
             self._ray.remote(self._chief_handle.add_scalar,
-                             self._exp_perf, "GenerateData/Time", m["total"], avg_time)
+                             self._exp_perf_handle, "GenerateData/Time", m["total"], avg_time)
             self._ray.remote(self._chief_handle.add_scalar,
-                             self._exp_perf, "GenerateData/CPU", m["total"], avg_cpu)
+                             self._exp_perf_handle, "GenerateData/CPU", m["total"], avg_cpu)
             if self._gpu_device is not None:
                 avg_mem = m["gpu_mem"] / m["count"]
                 avg_util = m["gpu_util"] / m["count"]
                 self._ray.remote(self._chief_handle.add_scalar,
-                                 self._exp_perf, "GenerateData/GPUMem", m["total"], avg_mem)
+                                 self._exp_perf_handle, "GenerateData/GPUMem", m["total"], avg_mem)
                 self._ray.remote(self._chief_handle.add_scalar,
-                                 self._exp_perf, "GenerateData/GPUUtil", m["total"], avg_util)
+                                 self._exp_perf_handle, "GenerateData/GPUUtil", m["total"], avg_util)
             m.update({"time": 0.0, "cpu": 0.0, "gpu_mem": 0.0, "gpu_util": 0.0, "count": 0})
 
         # Log after both players generated data
         if self._t_prof.log_verbose and traverser == 1 and (cfr_iter % 3 == 0):
             for p in range(self._t_prof.n_seats):
                 self._ray.remote(self._chief_handle.add_scalar,
-                                 self._exps_adv_buffer_size[p], "Debug/BufferSize", cfr_iter,
+                                 self._exps_adv_buffer_size_handles[p], "Debug/BufferSize", cfr_iter,
                                  self._adv_buffers[p].size)
                 if self._AVRG:
                     self._ray.remote(self._chief_handle.add_scalar,
-                                     self._exps_avrg_buffer_size[p], "Debug/BufferSize", cfr_iter,
+                                     self._exps_avrg_buffer_size_handles[p], "Debug/BufferSize", cfr_iter,
                                      self._avrg_buffers[p].size)
 
             process = psutil.Process(os.getpid())
             self._ray.remote(self._chief_handle.add_scalar,
-                             self._exp_mem_usage, "Debug/MemoryUsage/LA", cfr_iter,
+                             self._exp_mem_usage_handle, "Debug/MemoryUsage/LA", cfr_iter,
                              process.memory_info().rss)
 
     def update(self, adv_state_dicts=None, avrg_state_dicts=None):
@@ -240,16 +240,16 @@ class LearnerActor(WorkerBase):
             avg_time = m["time"] / m["count"]
             avg_cpu = m["cpu"] / m["count"]
             self._ray.remote(self._chief_handle.add_scalar,
-                             self._exp_perf, "Update/Time", m["total"], avg_time)
+                             self._exp_perf_handle, "Update/Time", m["total"], avg_time)
             self._ray.remote(self._chief_handle.add_scalar,
-                             self._exp_perf, "Update/CPU", m["total"], avg_cpu)
+                             self._exp_perf_handle, "Update/CPU", m["total"], avg_cpu)
             if self._gpu_device is not None:
                 avg_mem = m["gpu_mem"] / m["count"]
                 avg_util = m["gpu_util"] / m["count"]
                 self._ray.remote(self._chief_handle.add_scalar,
-                                 self._exp_perf, "Update/GPUMem", m["total"], avg_mem)
+                                 self._exp_perf_handle, "Update/GPUMem", m["total"], avg_mem)
                 self._ray.remote(self._chief_handle.add_scalar,
-                                 self._exp_perf, "Update/GPUUtil", m["total"], avg_util)
+                                 self._exp_perf_handle, "Update/GPUUtil", m["total"], avg_util)
             m.update({"time": 0.0, "cpu": 0.0, "gpu_mem": 0.0, "gpu_util": 0.0, "count": 0})
 
     def get_loss_last_batch_adv(self, p_id):

@@ -23,7 +23,7 @@ class ParameterServer(ParameterServerBase):
         self._adv_optim, self._adv_lr_scheduler = self._get_new_adv_optim()
 
         if self._t_prof.log_verbose:
-            self._exp_mem_usage = self._ray.get(
+            self._exp_mem_usage_handle = self._ray.get(
                 self._ray.remote(self._chief_handle.create_experiment,
                                  f"PS{owner}/Memory_Usage"))
 
@@ -72,7 +72,7 @@ class ParameterServer(ParameterServerBase):
             # Logs
             process = psutil.Process(os.getpid())
             self._ray.remote(self._chief_handle.add_scalar,
-                             self._exp_mem_usage, "Debug/MemoryUsage/PS", cfr_iter,
+                             self._exp_mem_usage_handle, "Debug/MemoryUsage/PS", cfr_iter,
                              process.memory_info().rss)
 
     def reset_avrg_net(self):

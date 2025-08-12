@@ -9,6 +9,17 @@ This codebase is designed for:
 
 This implementation seamlessly be runs on your local machine and on hundreds of cores on AWS.
 
+### Fork-specific notes
+
+- **Automatic resource detection**: This fork probes available CPU cores, GPUs, and memory to size
+  Ray actors and adjust batch sizes without manual configuration.
+- **Linux shared memory**: PyTorch and Ray rely on `/dev/shm` for high-throughput data exchange.
+  Increase this tmpfs (e.g., `sudo mount -o remount,size=32G /dev/shm` or Docker's `--shm-size`)
+  to fully utilize system resources.
+- **Additional enhancements over the original repository**: timestamped TensorBoard logging,
+  Ray dashboard enabled by default, GPU device selection flags, and per-actor resource statistics
+  recorded during training.
+
 ### Reproducing Results from Single Deep CFR (Steinberger 2019) [2]
 The run-script `DeepCFR/paper_experiment_sdcfr_vs_deepcfr_h2h.py` launches one run of the Head-to-Head performance
 comparison between Single Deep CFR and Deep CFR as presented in [2]. We ran the experiments on an m5.12xlarge instance

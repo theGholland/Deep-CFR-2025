@@ -260,7 +260,7 @@ class TrainingProfile(TrainingProfileBase):
         self.sampler = sampler
         self.n_actions_traverser_samples = n_actions_traverser_samples
 
-        self.tb_writer = SummaryWriter(log_dir=self.path_log_storage)
+        self.tb_writer = SummaryWriter(log_dir=self.path_log_storage) if self.log_verbose else None
 
         self.mini_batch_size_adv = mini_batch_size_adv
         self.mini_batch_size_avrg = mini_batch_size_avrg

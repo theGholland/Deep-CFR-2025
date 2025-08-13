@@ -61,6 +61,8 @@ class Chief(_ChiefBase):
         log_dir = ospj(self._t_prof.path_log_storage, sanitized)
         os.makedirs(log_dir, exist_ok=True)
         writer = SummaryWriter(log_dir=log_dir)
+        if self._t_prof.log_verbose:
+            print(f"TensorBoard logs will be written to {log_dir}")
         handle = self._next_writer_handle
         self._next_writer_handle += 1
         self._writers[handle] = writer

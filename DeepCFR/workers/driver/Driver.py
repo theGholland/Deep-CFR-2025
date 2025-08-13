@@ -9,6 +9,9 @@ import subprocess
 import psutil
 import ray
 import torch
+import re
+import shutil
+from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -89,7 +92,19 @@ class Driver(DriverBase):
 
                     ray_log_root = tempfile.gettempdir()
 
-        t_prof.path_log_storage = os.path.join(ray_log_root, "tensorboard")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        sanitized_name = re.sub(r"[^\w.-]", "_", str(t_prof.name))
+        run_root = os.path.join(ray_log_root, "tensorboard", sanitized_name)
+        if os.path.exists(run_root):
+            archive_root = os.path.join(run_root, "archive")
+            os.makedirs(archive_root, exist_ok=True)
+            for entry in os.listdir(run_root):
+                full = os.path.join(run_root, entry)
+                if full == archive_root:
+                    continue
+                if os.path.isdir(full):
+                    shutil.move(full, os.path.join(archive_root, entry))
+        t_prof.path_log_storage = os.path.join(run_root, timestamp)
         os.makedirs(t_prof.path_log_storage, exist_ok=True)
 
         if getattr(t_prof, "tb_writer", None) is not None:
@@ -98,6 +113,8 @@ class Driver(DriverBase):
             except Exception:
                 pass
         t_prof.tb_writer = SummaryWriter(log_dir=t_prof.path_log_storage) if t_prof.log_verbose else None
+        if t_prof.log_verbose:
+            print(f"TensorBoard logs will be written to {t_prof.path_log_storage}")
 
         # Recreate logger with updated path
         self.logger = TensorboardLogger(
@@ -223,6 +240,7 @@ class Driver(DriverBase):
                 # """"""""""""""""
                 if self._cfr_iter % self._t_prof.log_export_freq == 0:
                     self.save_logs()
+                    self._show_log_dir_usage()
                 self.periodically_export_eval_agent()
     
                 # """"""""""""""""
@@ -262,6 +280,14 @@ class Driver(DriverBase):
             if self._cfr_iter % e[1] == 0:
                 return True
         return False
+
+    def _show_log_dir_usage(self):
+        if not os.path.exists(self._t_prof.path_log_storage):
+            return
+        try:
+            subprocess.run(["ls", "-lh", self._t_prof.path_log_storage], check=False)
+        except Exception as ex:
+            print(f"Failed to list log directory: {ex}")
 
     def checkpoint(self, **kwargs):
         # Call on all other workers sequentially to be safe against RAM overload

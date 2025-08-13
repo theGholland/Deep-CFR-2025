@@ -260,7 +260,16 @@ class TrainingProfile(TrainingProfileBase):
         self.sampler = sampler
         self.n_actions_traverser_samples = n_actions_traverser_samples
 
-        self.tb_writer = SummaryWriter(log_dir=self.path_log_storage) if self.log_verbose else None
+        # Write to disk more frequently to avoid losing data in long runs
+        self.tb_writer = (
+            SummaryWriter(
+                log_dir=self.path_log_storage,
+                flush_secs=5,
+                max_queue=10,
+            )
+            if self.log_verbose
+            else None
+        )
 
         self.mini_batch_size_adv = mini_batch_size_adv
         self.mini_batch_size_avrg = mini_batch_size_avrg
@@ -287,4 +296,12 @@ class TrainingProfile(TrainingProfileBase):
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-        self.tb_writer = SummaryWriter(log_dir=self.path_log_storage) if self.log_verbose else None
+        self.tb_writer = (
+            SummaryWriter(
+                log_dir=self.path_log_storage,
+                flush_secs=5,
+                max_queue=10,
+            )
+            if self.log_verbose
+            else None
+        )

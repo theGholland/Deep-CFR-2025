@@ -60,7 +60,7 @@ class Chief(_ChiefBase):
         sanitized = re.sub(r"[^\w.-]", "_", name)
         log_dir = ospj(self._t_prof.path_log_storage, sanitized)
         os.makedirs(log_dir, exist_ok=True)
-        writer = SummaryWriter(log_dir=log_dir)
+        writer = SummaryWriter(log_dir=log_dir, flush_secs=5, max_queue=10)
         handle = self._next_writer_handle
         self._next_writer_handle += 1
         self._writers[handle] = writer
@@ -68,6 +68,20 @@ class Chief(_ChiefBase):
 
     def add_scalar(self, handle, graph_name, step, value):
         self._writers[handle].add_scalar(graph_name, value, step)
+
+    def flush_tb_writers(self):
+        for w in self._writers.values():
+            try:
+                w.flush()
+            except Exception:
+                pass
+
+    def close_tb_writers(self):
+        for w in self._writers.values():
+            try:
+                w.close()
+            except Exception:
+                pass
 
     # ____________________________________________________ Strategy ____________________________________________________
     def pull_current_eval_strategy(self, last_iteration_receiver_has):

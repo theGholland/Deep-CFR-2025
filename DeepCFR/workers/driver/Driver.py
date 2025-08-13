@@ -94,10 +94,19 @@ class Driver(DriverBase):
 
         if getattr(t_prof, "tb_writer", None) is not None:
             try:
+                t_prof.tb_writer.flush()
                 t_prof.tb_writer.close()
             except Exception:
                 pass
-        t_prof.tb_writer = SummaryWriter(log_dir=t_prof.path_log_storage) if t_prof.log_verbose else None
+        t_prof.tb_writer = (
+            SummaryWriter(
+                log_dir=t_prof.path_log_storage,
+                flush_secs=5,
+                max_queue=10,
+            )
+            if t_prof.log_verbose
+            else None
+        )
 
         # Recreate logger with updated path
         self.logger = TensorboardLogger(
@@ -250,6 +259,19 @@ class Driver(DriverBase):
                 # """"""""""""""""
                 self.periodically_checkpoint()
         finally:
+            try:
+                self._ray.wait([self._ray.remote(self.chief_handle.flush_tb_writers)])
+                self._ray.wait([self._ray.remote(self.chief_handle.close_tb_writers)])
+            except Exception:
+                pass
+
+            if self._t_prof.tb_writer is not None:
+                try:
+                    self._t_prof.tb_writer.flush()
+                    self._t_prof.tb_writer.close()
+                except Exception:
+                    pass
+
             if getattr(self, "_tb_proc", None):
                 self._tb_proc.terminate()
                 try:

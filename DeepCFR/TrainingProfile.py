@@ -270,7 +270,7 @@ class TrainingProfile(TrainingProfileBase):
         self.sampler = sampler
         self.n_actions_traverser_samples = n_actions_traverser_samples
 
-        self.tb_writer = SummaryWriter(log_dir=self.path_log_storage) if self.log_verbose else None
+        self.tb_writer = SummaryWriter(log_dir=self.path_log_storage, flush_secs=5, max_queue=10) if self.log_verbose else None
         if self.log_verbose:
             print(f"TensorBoard logs will be written to {self.path_log_storage}")
 
@@ -299,6 +299,6 @@ class TrainingProfile(TrainingProfileBase):
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-        self.tb_writer = SummaryWriter(log_dir=self.path_log_storage) if self.log_verbose else None
+        self.tb_writer = SummaryWriter(log_dir=self.path_log_storage, flush_secs=5, max_queue=10) if self.log_verbose else None
         if self.log_verbose:
             print(f"TensorBoard logs will be written to {self.path_log_storage}")

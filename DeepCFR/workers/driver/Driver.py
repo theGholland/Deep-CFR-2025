@@ -92,19 +92,25 @@ class Driver(DriverBase):
 
                     ray_log_root = tempfile.gettempdir()
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        sanitized_name = re.sub(r"[^\w.-]", "_", str(t_prof.name))
-        run_root = os.path.join(ray_log_root, "tensorboard", sanitized_name)
-        if os.path.exists(run_root):
-            archive_root = os.path.join(run_root, "archive")
-            os.makedirs(archive_root, exist_ok=True)
-            for entry in os.listdir(run_root):
-                full = os.path.join(run_root, entry)
-                if full == archive_root:
-                    continue
-                if os.path.isdir(full):
-                    shutil.move(full, os.path.join(archive_root, entry))
-        t_prof.path_log_storage = os.path.join(run_root, timestamp)
+        # Respect an existing log directory if the TrainingProfile already
+        # specified one.  This allows callers to control where TensorBoard
+        # writes its event files.  Only fall back to Ray's temporary logging
+        # directory when no path has been set yet.
+        if not getattr(t_prof, "path_log_storage", None):
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            sanitized_name = re.sub(r"[^\w.-]", "_", str(t_prof.name))
+            run_root = os.path.join(ray_log_root, "tensorboard", sanitized_name)
+            if os.path.exists(run_root):
+                archive_root = os.path.join(run_root, "archive")
+                os.makedirs(archive_root, exist_ok=True)
+                for entry in os.listdir(run_root):
+                    full = os.path.join(run_root, entry)
+                    if full == archive_root:
+                        continue
+                    if os.path.isdir(full):
+                        shutil.move(full, os.path.join(archive_root, entry))
+            t_prof.path_log_storage = os.path.join(run_root, timestamp)
+
         os.makedirs(t_prof.path_log_storage, exist_ok=True)
 
         if getattr(t_prof, "tb_writer", None) is not None:

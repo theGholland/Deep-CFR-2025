@@ -2,7 +2,6 @@ import copy
 import os
 import pickle
 import re
-import shutil
 from os.path import join as ospj
 
 import psutil
@@ -60,8 +59,7 @@ class Chief(_ChiefBase):
     def create_experiment(self, name):
         sanitized = re.sub(r"[^\w.-]", "_", name)
         log_dir = ospj(self._t_prof.path_log_storage, sanitized)
-        if os.path.exists(log_dir):
-            shutil.rmtree(log_dir)
+        os.makedirs(log_dir, exist_ok=True)
         writer = SummaryWriter(log_dir=log_dir)
         handle = self._next_writer_handle
         self._next_writer_handle += 1

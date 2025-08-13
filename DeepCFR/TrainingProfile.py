@@ -248,7 +248,17 @@ class TrainingProfile(TrainingProfileBase):
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         sanitized_name = re.sub(r"[^\w.-]", "_", str(self.name))
-        self.path_log_storage = os.path.join(self._data_path, "tensorboard", sanitized_name, timestamp)
+        run_root = os.path.join(self._data_path, "tensorboard", sanitized_name)
+        if os.path.exists(run_root):
+            archive_root = os.path.join(run_root, "archive")
+            os.makedirs(archive_root, exist_ok=True)
+            for entry in os.listdir(run_root):
+                full = os.path.join(run_root, entry)
+                if full == archive_root:
+                    continue
+                if os.path.isdir(full):
+                    shutil.move(full, os.path.join(archive_root, entry))
+        self.path_log_storage = os.path.join(run_root, timestamp)
         if os.path.exists(self.path_log_storage):
             shutil.rmtree(self.path_log_storage)
         os.makedirs(self.path_log_storage, exist_ok=True)
@@ -260,16 +270,9 @@ class TrainingProfile(TrainingProfileBase):
         self.sampler = sampler
         self.n_actions_traverser_samples = n_actions_traverser_samples
 
-        # Write to disk more frequently to avoid losing data in long runs
-        self.tb_writer = (
-            SummaryWriter(
-                log_dir=self.path_log_storage,
-                flush_secs=5,
-                max_queue=10,
-            )
-            if self.log_verbose
-            else None
-        )
+        self.tb_writer = SummaryWriter(log_dir=self.path_log_storage, flush_secs=5, max_queue=10) if self.log_verbose else None
+        if self.log_verbose:
+            print(f"TensorBoard logs will be written to {self.path_log_storage}")
 
         self.mini_batch_size_adv = mini_batch_size_adv
         self.mini_batch_size_avrg = mini_batch_size_avrg
@@ -296,12 +299,6 @@ class TrainingProfile(TrainingProfileBase):
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-        self.tb_writer = (
-            SummaryWriter(
-                log_dir=self.path_log_storage,
-                flush_secs=5,
-                max_queue=10,
-            )
-            if self.log_verbose
-            else None
-        )
+        self.tb_writer = SummaryWriter(log_dir=self.path_log_storage, flush_secs=5, max_queue=10) if self.log_verbose else None
+        if self.log_verbose:
+            print(f"TensorBoard logs will be written to {self.path_log_storage}")

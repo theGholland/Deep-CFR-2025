@@ -105,6 +105,36 @@ try:  # pragma: no cover - best effort patching
         return new_dict
 
     MaybeRay.state_dict_to_torch = _state_dict_to_torch
+
+    # Ensure actors created during DriverBase initialisation do not reserve GPU
+    # resources.  DriverBase spawns the Chief and various evaluation helpers
+    # without specifying resource requirements, causing them to inherit the
+    # current default GPU fraction.  We temporarily force this default to zero
+    # while the base class sets up these CPU-only workers.
+    from PokerRL.rl.base_cls.workers.DriverBase import DriverBase
+
+    _orig_driverbase_init = DriverBase.__init__
+
+    def _driverbase_init(self, t_prof, eval_methods, chief_cls, eval_agent_cls,
+                         n_iterations=None, iteration_to_import=None,
+                         name_to_import=None):
+        prev_default = getattr(MaybeRay, "_default_num_gpus", 0)
+        MaybeRay._default_num_gpus = 0
+        try:
+            return _orig_driverbase_init(
+                self,
+                t_prof,
+                eval_methods,
+                chief_cls,
+                eval_agent_cls,
+                n_iterations,
+                iteration_to_import,
+                name_to_import,
+            )
+        finally:  # pragma: no cover - best effort restoration
+            MaybeRay._default_num_gpus = prev_default
+
+    DriverBase.__init__ = _driverbase_init
 except Exception:  # noqa: S110
     # Dependencies are optional at import time; if they are missing we simply
     # skip the patch and rely on the original implementation.

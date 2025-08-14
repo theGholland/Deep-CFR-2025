@@ -37,9 +37,13 @@ try:  # pragma: no cover - best effort patching
                 # machine sizes automatically.
                 "object_store_memory": int(total_mem * 0.2),
                 "num_cpus": psutil.cpu_count() or 1,
-                # Advertise only ~80% of total RAM to Ray's scheduler so worker
-                # processes cannot collectively exceed that amount.
-                "resources": {"memory": int(total_mem * 0.8)},
+                # Ray 2.x already exposes a built-in ``memory`` resource for
+                # scheduling and no longer allows configuring it via the
+                # ``resources`` dict.  We therefore rely on Ray's default
+                # behaviour, which advertises the machine's total available
+                # memory.  Previously this code attempted to limit worker
+                # memory to ~80% of the system RAM; this caused crashes with
+                # newer Ray versions.  Removing it restores compatibility.
                 # Enable Ray's web dashboard so users can monitor resource usage
                 # and task progress at http://localhost:8265.  We bind to
                 # ``0.0.0.0`` so the dashboard is reachable when running on a

@@ -29,11 +29,17 @@ try:  # pragma: no cover - best effort patching
             # CPU and GPU without additional configuration.  This prevents Ray
             # from crashing when CUDA is present but resources have not been
             # declared explicitly.
+            total_mem = psutil.virtual_memory().total
             ray_init_kwargs = {
-                "object_store_memory": min(
-                    2 * (10 ** 10), int(psutil.virtual_memory().total * 0.8)
-                ),
+                # Reserve only 20% of RAM for Ray's object store so that roughly
+                # 80% remains available for actors and tasks.  Using a
+                # percentage instead of a fixed value adapts to different
+                # machine sizes automatically.
+                "object_store_memory": int(total_mem * 0.2),
                 "num_cpus": psutil.cpu_count() or 1,
+                # Advertise only ~80% of total RAM to Ray's scheduler so worker
+                # processes cannot collectively exceed that amount.
+                "resources": {"memory": int(total_mem * 0.8)},
                 # Enable Ray's web dashboard so users can monitor resource usage
                 # and task progress at http://localhost:8265.  We bind to
                 # ``0.0.0.0`` so the dashboard is reachable when running on a

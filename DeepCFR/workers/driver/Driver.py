@@ -13,6 +13,7 @@ import re
 import shutil
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
+from DeepCFR.utils.device import resolve_device
 
 
 class Driver(DriverBase):
@@ -44,9 +45,13 @@ class Driver(DriverBase):
 
         total_gpu = torch.cuda.device_count() if torch.cuda.is_available() else 0
 
-        la_uses_gpu = _is_cuda(t_prof.module_args["adv_training"].device_training) or _is_cuda(t_prof.device_inference)
-        ps_uses_gpu = _is_cuda(t_prof.device_parameter_server)
-        eval_uses_gpu = _is_cuda(t_prof.device_inference)
+        adv_device = resolve_device(t_prof.module_args["adv_training"].device_training)
+        inf_device = resolve_device(t_prof.device_inference)
+        ps_device = resolve_device(t_prof.device_parameter_server)
+
+        la_uses_gpu = _is_cuda(adv_device) or _is_cuda(inf_device)
+        ps_uses_gpu = _is_cuda(ps_device)
+        eval_uses_gpu = _is_cuda(inf_device)
 
         la_gpu_workers = t_prof.n_learner_actors if la_uses_gpu else 0
         ps_gpu_workers = t_prof.n_seats if ps_uses_gpu else 0

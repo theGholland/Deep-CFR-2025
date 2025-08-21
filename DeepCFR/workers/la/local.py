@@ -14,6 +14,7 @@ from DeepCFR.workers.la.AvrgWrapper import AvrgWrapper
 from DeepCFR.workers.la.sampling_algorithms.MultiOutcomeSampler import MultiOutcomeSampler
 from PokerRL.rl import rl_util
 from PokerRL.rl.base_cls.workers.WorkerBase import WorkerBase
+from DeepCFR.utils.device import resolve_device
 
 
 class LearnerActor(WorkerBase):
@@ -27,6 +28,9 @@ class LearnerActor(WorkerBase):
         self._id = worker_id
         self._chief_handle = chief_handle
 
+        self._device_inference = resolve_device(self._t_prof.device_inference)
+        self._adv_device = resolve_device(self._adv_args.device_training)
+
         self._adv_buffers = [
             AdvReservoirBuffer(owner=p, env_bldr=self._env_bldr, max_size=self._adv_args.max_buffer_size,
                                nn_type=t_prof.nn_type,
@@ -38,7 +42,7 @@ class LearnerActor(WorkerBase):
             AdvWrapper(owner=p,
                        env_bldr=self._env_bldr,
                        adv_training_args=self._adv_args,
-                       device=self._adv_args.device_training)
+                       device=self._adv_device)
             for p in range(self._t_prof.n_seats)
         ]
 
@@ -50,6 +54,7 @@ class LearnerActor(WorkerBase):
         # """"""""""""""""""""""""""""
         if self._AVRG:
             self._avrg_args = t_prof.module_args["avrg_training"]
+            self._avrg_device = resolve_device(self._avrg_args.device_training)
 
             self._avrg_buffers = [
                 AvrgReservoirBuffer(owner=p, env_bldr=self._env_bldr, max_size=self._avrg_args.max_buffer_size,
@@ -62,7 +67,7 @@ class LearnerActor(WorkerBase):
                 AvrgWrapper(owner=p,
                             env_bldr=self._env_bldr,
                             avrg_training_args=self._avrg_args,
-                            device=self._avrg_args.device_training)
+                            device=self._avrg_device)
                 for p in range(self._t_prof.n_seats)
             ]
 
@@ -85,15 +90,12 @@ class LearnerActor(WorkerBase):
                 raise ValueError("Currently we don't support", self._t_prof.sampler.lower(), "sampling.")
 
         self._gpu_device = None
-        devices = [self._adv_args.device_training]
+        devices = [self._adv_device]
         if self._AVRG:
-            devices.append(self._avrg_args.device_training)
+            devices.append(self._avrg_device)
         for dev in devices:
-            if isinstance(dev, torch.device) and dev.type == "cuda":
+            if dev.type == "cuda":
                 self._gpu_device = dev
-                break
-            if isinstance(dev, str) and dev.startswith("cuda"):
-                self._gpu_device = torch.device(dev)
                 break
 
         self._perf_log_interval = 10
@@ -136,7 +138,7 @@ class LearnerActor(WorkerBase):
 
         iteration_strats = [
             IterationStrategy(t_prof=self._t_prof, env_bldr=self._env_bldr, owner=p,
-                              device=self._t_prof.device_inference, cfr_iter=cfr_iter)
+                              device=self._device_inference, cfr_iter=cfr_iter)
             for p in range(self._t_prof.n_seats)
         ]
         for s in iteration_strats:

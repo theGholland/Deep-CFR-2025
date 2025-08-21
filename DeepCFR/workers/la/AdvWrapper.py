@@ -3,11 +3,13 @@ import torch
 from PokerRL.rl.neural.DuelingQNet import DuelingQNet
 from PokerRL.rl.neural.NetWrapperBase import NetWrapperArgsBase as _NetWrapperArgsBase
 from PokerRL.rl.neural.NetWrapperBase import NetWrapperBase as _NetWrapperBase
+from DeepCFR.utils.device import resolve_device
 
 
 class AdvWrapper(_NetWrapperBase):
 
     def __init__(self, env_bldr, adv_training_args, owner, device):
+        device = resolve_device(device)
         super().__init__(
             net=DuelingQNet(env_bldr=env_bldr, q_args=adv_training_args.adv_net_args, device=device),
             env_bldr=env_bldr,

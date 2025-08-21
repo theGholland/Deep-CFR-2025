@@ -19,7 +19,6 @@ __version__ = "0.1.0"
 try:  # pragma: no cover - best effort patching
     import psutil
     import ray
-    import torch
     import numpy as np
     from PokerRL.rl.MaybeRay import MaybeRay
 
@@ -52,13 +51,13 @@ try:  # pragma: no cover - best effort patching
                 "dashboard_host": "0.0.0.0",
             }
 
-            try:
-                if torch.cuda.is_available():
-                    ray_init_kwargs["num_gpus"] = torch.cuda.device_count()
-            except Exception:  # pragma: no cover - best effort GPU detection
-                pass
-
             ray.init(**ray_init_kwargs)
+            try:
+                MaybeRay._default_num_gpus = int(
+                    ray.cluster_resources().get("GPU", 0)
+                )
+            except Exception:  # pragma: no cover - best effort GPU detection
+                MaybeRay._default_num_gpus = 0
     MaybeRay.init_local = _init_local
 
     # Default CPU fraction per worker.  This can be overridden at runtime by
@@ -86,6 +85,8 @@ try:  # pragma: no cover - best effort patching
 
     def _state_dict_to_torch(self, _dict, device):
         """Convert numpy arrays in a state dict to writable torch tensors."""
+        import torch
+
         new_dict = {}
         if self.runs_distributed:
             for k in list(_dict.keys()):

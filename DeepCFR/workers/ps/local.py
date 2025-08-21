@@ -9,6 +9,7 @@ from PokerRL.rl import rl_util
 from PokerRL.rl.base_cls.workers.ParameterServerBase import ParameterServerBase
 from PokerRL.rl.neural.AvrgStrategyNet import AvrgStrategyNet
 from PokerRL.rl.neural.DuelingQNet import DuelingQNet
+from DeepCFR.utils.device import resolve_device
 
 
 class ParameterServer(ParameterServerBase):
@@ -17,6 +18,7 @@ class ParameterServer(ParameterServerBase):
         super().__init__(t_prof=t_prof, chief_handle=chief_handle)
 
         self.owner = owner
+        self._device = resolve_device(t_prof.device_parameter_server)
         self._adv_args = t_prof.module_args["adv_training"]
 
         self._adv_net = self._get_new_adv_net()

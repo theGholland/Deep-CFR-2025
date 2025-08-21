@@ -7,7 +7,6 @@ import re
 import shutil
 from datetime import datetime
 
-import torch
 from torch.utils.tensorboard import SummaryWriter
 from PokerRL.game import bet_sets
 from PokerRL.game.games import DiscretizedNLLeduc
@@ -20,13 +19,6 @@ from DeepCFR.EvalAgentDeepCFR import EvalAgentDeepCFR
 from DeepCFR.workers.la.AdvWrapper import AdvTrainingArgs
 from DeepCFR.workers.la.AvrgWrapper import AvrgTrainingArgs
 from utils.memory import estimate_batch_size
-
-
-def _resolve_device(dev):
-    """Translate special device strings."""
-    if isinstance(dev, str) and dev.lower() == "auto":
-        return "cuda" if torch.cuda.is_available() else "cpu"
-    return dev
 
 
 class TrainingProfile(TrainingProfileBase):
@@ -130,10 +122,6 @@ class TrainingProfile(TrainingProfileBase):
 
                  ):
         print(" ************************** Initing args for: ", name, "  **************************")
-
-        device_inference = _resolve_device(device_inference)
-        device_training = _resolve_device(device_training)
-        device_parameter_server = _resolve_device(device_parameter_server)
 
         if mini_batch_size_adv is None or mini_batch_size_avrg is None:
             est = estimate_batch_size()
@@ -289,8 +277,7 @@ class TrainingProfile(TrainingProfileBase):
             self.n_learner_actors = 1
         self.max_n_las_sync_simultaneously = max_n_las_sync_simultaneously
 
-        assert isinstance(device_parameter_server, str), "Please pass a string (either 'cpu' or 'cuda')!"
-        self.device_parameter_server = torch.device(device_parameter_server)
+        self.device_parameter_server = device_parameter_server
 
     def __getstate__(self):
         state = self.__dict__.copy()

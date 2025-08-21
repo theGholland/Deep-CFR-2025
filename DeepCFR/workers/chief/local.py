@@ -13,6 +13,7 @@ from DeepCFR.StrategyBuffer import StrategyBuffer
 from PokerRL.rl import rl_util
 from PokerRL.rl.base_cls.workers.ChiefBase import ChiefBase as _ChiefBase
 from PokerRL.util import file_util
+from DeepCFR.utils.device import resolve_device
 
 
 class Chief(_ChiefBase):
@@ -22,6 +23,7 @@ class Chief(_ChiefBase):
         self._ps_handles = None
         self._la_handles = None
         self._env_bldr = rl_util.get_env_builder(t_prof=t_prof)
+        self._device_inference = resolve_device(self._t_prof.device_inference)
 
         # SummaryWriter handles
         self._writers = {}
@@ -39,7 +41,7 @@ class Chief(_ChiefBase):
                                owner=p,
                                env_bldr=self._env_bldr,
                                max_size=None,
-                               device=self._t_prof.device_inference)
+                               device=self._device_inference)
                 for p in range(t_prof.n_seats)
             ]
 
@@ -149,10 +151,10 @@ class Chief(_ChiefBase):
     # Only applicable to SINGLE
     def add_new_iteration_strategy_model(self, owner, adv_net_state_dict, cfr_iter):
         iter_strat = IterationStrategy(t_prof=self._t_prof, env_bldr=self._env_bldr, owner=owner,
-                                         device=self._t_prof.device_inference, cfr_iter=cfr_iter)
+                                         device=self._device_inference, cfr_iter=cfr_iter)
 
         iter_strat.load_net_state_dict(
-            self._ray.state_dict_to_torch(adv_net_state_dict, device=self._t_prof.device_inference))
+            self._ray.state_dict_to_torch(adv_net_state_dict, device=self._device_inference))
         self._strategy_buffers[iter_strat.owner].add(iteration_strat=iter_strat)
 
         #  Store to disk

@@ -5,11 +5,13 @@ from PokerRL.rl import rl_util
 from PokerRL.rl.neural.AvrgStrategyNet import AvrgStrategyNet
 from PokerRL.rl.neural.NetWrapperBase import NetWrapperArgsBase as _NetWrapperArgsBase
 from PokerRL.rl.neural.NetWrapperBase import NetWrapperBase as _NetWrapperBase
+from DeepCFR.utils.device import resolve_device
 
 
 class AvrgWrapper(_NetWrapperBase):
 
     def __init__(self, owner, env_bldr, avrg_training_args, device):
+        device = resolve_device(device)
         super().__init__(
             net=AvrgStrategyNet(avrg_net_args=avrg_training_args.avrg_net_args, env_bldr=env_bldr, device=device),
             env_bldr=env_bldr,

@@ -42,8 +42,6 @@ class Driver(DriverBase):
                 or (isinstance(device, str) and device.startswith("cuda"))
             )
 
-        total_gpu = torch.cuda.device_count() if torch.cuda.is_available() else 0
-
         la_uses_gpu = _is_cuda(t_prof.module_args["adv_training"].device_training) or _is_cuda(t_prof.device_inference)
         ps_uses_gpu = _is_cuda(t_prof.device_parameter_server)
         eval_uses_gpu = _is_cuda(t_prof.device_inference)
@@ -51,8 +49,6 @@ class Driver(DriverBase):
         la_gpu_workers = t_prof.n_learner_actors if la_uses_gpu else 0
         ps_gpu_workers = t_prof.n_seats if ps_uses_gpu else 0
         eval_gpu_workers = len(eval_methods) if eval_uses_gpu else 0
-        gpu_workers = la_gpu_workers + ps_gpu_workers + eval_gpu_workers
-        gpu_fraction = min(1.0, total_gpu / gpu_workers) if gpu_workers > 0 else 0
 
         # Force CPU-only allocation for actors created by DriverBase (Chief and evaluators).
         # These components do not require GPU resources and would otherwise reserve a
@@ -62,6 +58,14 @@ class Driver(DriverBase):
         super().__init__(t_prof=t_prof, eval_methods=eval_methods, n_iterations=n_iterations,
                          iteration_to_import=iteration_to_import, name_to_import=name_to_import,
                          chief_cls=Chief, eval_agent_cls=EvalAgentDeepCFR)
+
+        try:
+            total_gpu = int(ray.cluster_resources().get("GPU", 0))
+        except Exception:
+            total_gpu = 0
+
+        gpu_workers = la_gpu_workers + ps_gpu_workers + eval_gpu_workers
+        gpu_fraction = min(1.0, total_gpu / gpu_workers) if gpu_workers > 0 else 0
 
         # Restore the default so subsequent workers that do require GPU can opt in
         # by explicitly requesting it when created.

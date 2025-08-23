@@ -220,7 +220,7 @@ class HighLevelAlgo(_HighLevelAlgoBase):
         losses = [loss for loss in losses if loss is not None]
 
         if not losses:
-            return grads, None
+            return grads_refs, None
 
         averaged_loss = sum(losses) / float(len(losses))
 

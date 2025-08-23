@@ -5,6 +5,7 @@ import time
 import psutil
 import torch
 import logging
+import subprocess
 
 from DeepCFR.IterationStrategy import IterationStrategy
 from DeepCFR.EvalAgentDeepCFR import EvalAgentDeepCFR
@@ -16,6 +17,36 @@ from DeepCFR.workers.la.sampling_algorithms.MultiOutcomeSampler import MultiOutc
 from PokerRL.rl import rl_util
 from PokerRL.rl.base_cls.workers.WorkerBase import WorkerBase
 from DeepCFR.utils.device import resolve_device
+
+
+def _check_gpu_metrics_available(device):
+    """Determine if GPU metrics can be queried.
+
+    Returns
+    -------
+    tuple
+        (available, use_nvidia_smi) where ``available`` indicates if metrics
+        are accessible and ``use_nvidia_smi`` is ``True`` when metrics must be
+        gathered via ``nvidia-smi`` instead of ``torch.cuda.utilization``.
+    """
+    if device is None:
+        return False, False
+
+    if hasattr(torch.cuda, "utilization"):
+        try:
+            torch.cuda.memory_reserved(device)
+            torch.cuda.utilization(device)
+            return True, False
+        except Exception as e:
+            logging.warning(f"GPU metrics unavailable: {e}")
+            return False, False
+
+    try:
+        subprocess.run(["nvidia-smi"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return True, True
+    except Exception:
+        logging.warning("torch.cuda.utilization not available and nvidia-smi not found; GPU metrics disabled")
+        return False, False
 
 
 class LearnerActor(WorkerBase):
@@ -99,14 +130,7 @@ class LearnerActor(WorkerBase):
                 self._gpu_device = dev
                 break
 
-        self._gpu_metrics_available = True
-        if self._gpu_device is not None:
-            try:
-                torch.cuda.memory_reserved(self._gpu_device)
-                torch.cuda.utilization(self._gpu_device)
-            except Exception as e:
-                logging.warning(f"GPU metrics unavailable: {e}")
-                self._gpu_metrics_available = False
+        self._gpu_metrics_available, self._use_nvidia_smi = _check_gpu_metrics_available(self._gpu_device)
 
         self._perf_log_interval = 10
         self._perf_metrics = {
@@ -141,6 +165,40 @@ class LearnerActor(WorkerBase):
                     ]
                 )
 
+    def _query_gpu_metrics(self):
+        """Return current GPU memory and utilization metrics.
+
+        Uses ``torch.cuda.utilization`` when available, otherwise falls back to
+        querying ``nvidia-smi``. If both approaches fail, metrics are disabled
+        and zeros are returned.
+        """
+        try:
+            if self._use_nvidia_smi:
+                index = self._gpu_device.index if self._gpu_device.index is not None else 0
+                result = subprocess.run(
+                    [
+                        "nvidia-smi",
+                        "--query-gpu=memory.used,utilization.gpu",
+                        "--format=csv,noheader,nounits",
+                        "-i",
+                        str(index),
+                    ],
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                mem_str, util_str = result.stdout.strip().split(",")
+                return float(mem_str) * 1024 * 1024, float(util_str)
+            else:
+                mem = torch.cuda.memory_reserved(self._gpu_device)
+                util = torch.cuda.utilization(self._gpu_device)
+                return float(mem), float(util)
+        except Exception as e:
+            logging.warning(f"Failed to query GPU metrics: {e}")
+            self._gpu_metrics_available = False
+            return 0.0, 0.0
+
     def generate_data(self, traverser, cfr_iter):
         process = psutil.Process(os.getpid())
         process.cpu_percent()
@@ -164,12 +222,7 @@ class LearnerActor(WorkerBase):
         cpu = process.cpu_percent()
         gpu_mem = gpu_util = 0.0
         if self._gpu_device is not None and self._gpu_metrics_available:
-            try:
-                gpu_mem = torch.cuda.memory_reserved(self._gpu_device)
-                gpu_util = torch.cuda.utilization(self._gpu_device)
-            except Exception as e:
-                logging.warning(f"Failed to query GPU metrics: {e}")
-                self._gpu_metrics_available = False
+            gpu_mem, gpu_util = self._query_gpu_metrics()
 
         m = self._perf_metrics["generate_data"]
         m["time"] += duration
@@ -242,12 +295,7 @@ class LearnerActor(WorkerBase):
         cpu = process.cpu_percent()
         gpu_mem = gpu_util = 0.0
         if self._gpu_device is not None and self._gpu_metrics_available:
-            try:
-                gpu_mem = torch.cuda.memory_reserved(self._gpu_device)
-                gpu_util = torch.cuda.utilization(self._gpu_device)
-            except Exception as e:
-                logging.warning(f"Failed to query GPU metrics: {e}")
-                self._gpu_metrics_available = False
+            gpu_mem, gpu_util = self._query_gpu_metrics()
 
         m = self._perf_metrics["update"]
         m["time"] += duration

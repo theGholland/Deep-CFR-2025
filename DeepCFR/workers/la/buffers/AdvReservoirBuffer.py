@@ -32,6 +32,9 @@ class AdvReservoirBuffer(_ResBufBase):
         self.n_entries_seen += 1
 
     def sample(self, batch_size, device):
+        if self.size == 0 or self.size < batch_size:
+            return None
+
         indices = torch.randint(0, self.size, (batch_size,), dtype=torch.long, device=self.device)
 
         if self._nn_type == "recurrent":

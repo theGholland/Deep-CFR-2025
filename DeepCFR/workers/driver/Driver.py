@@ -54,59 +54,10 @@ class Driver(DriverBase):
         memory_per_la = memory_per_worker
         memory_per_ps = memory_per_worker
 
-        super().__init__(t_prof=t_prof, eval_methods=eval_methods, n_iterations=n_iterations,
-                         iteration_to_import=iteration_to_import, name_to_import=name_to_import,
-                         chief_cls=Chief, eval_agent_cls=EvalAgentDeepCFR)
-
-        def _is_cuda(device):
-            return (
-                (isinstance(device, torch.device) and device.type == "cuda")
-                or (isinstance(device, str) and device.startswith("cuda"))
-            )
-
-        try:
-            total_gpu = ray.cluster_resources().get("GPU", 0)
-        except Exception:
-            total_gpu = 0
-
-        cuda_available = torch.cuda.is_available()
-        ray_has_gpu = total_gpu > 0
-
-        adv_device = resolve_device(t_prof.module_args["adv_training"].device_training)
-        inf_device = resolve_device(t_prof.device_inference)
-        ps_device = resolve_device(t_prof.device_parameter_server)
-
-        def _ensure_device(dev, name):
-            if _is_cuda(dev) and (not cuda_available or not ray_has_gpu):
-                warnings.warn(
-                    f"CUDA device requested for {name} but GPUs are unavailable; falling back to CPU.",
-                    RuntimeWarning,
-                )
-                return torch.device("cpu")
-            return dev
-
-        adv_device = _ensure_device(adv_device, "adv_training")
-        inf_device = _ensure_device(inf_device, "inference")
-        ps_device = _ensure_device(ps_device, "parameter_server")
-
-        la_uses_gpu = _is_cuda(adv_device) or _is_cuda(inf_device)
-        ps_uses_gpu = _is_cuda(ps_device)
-        eval_uses_gpu = _is_cuda(inf_device)
-
-        la_gpu_workers = t_prof.n_learner_actors if la_uses_gpu else 0
-        ps_gpu_workers = t_prof.n_seats if ps_uses_gpu else 0
-        eval_gpu_workers = len(eval_methods) if eval_uses_gpu else 0
-        gpu_workers = la_gpu_workers + ps_gpu_workers + eval_gpu_workers
-        gpu_fraction = min(1.0, total_gpu / gpu_workers) if gpu_workers > 0 else 0
-
-        # Determine Ray's log directory and configure TensorBoard
-        #
-        # Ray has changed a number of its internal APIs over time.  Older
-        # versions exposed ``ray._private.worker.global_node`` while newer
-        # releases renamed the attribute to ``_global_node`` and removed the
-        # helper ``get_ray_temp_dir``.  We try a best-effort sequence of
-        # lookups that works across a wide range of Ray versions without
-        # depending on any specific private function.
+        # Determine Ray's log directory and compute the TensorBoard log path
+        # before calling ``super().__init__`` so that any base-class
+        # initialization that depends on ``t_prof.path_log_storage`` sees the
+        # finalized value.
         try:
             # Ray >= 1.7 used ``_global_node``.  In some versions the public
             # ``get_logs_dir`` is still available.
@@ -151,6 +102,51 @@ class Driver(DriverBase):
             t_prof.path_log_storage = os.path.join(run_root, timestamp)
 
         os.makedirs(t_prof.path_log_storage, exist_ok=True)
+
+        super().__init__(t_prof=t_prof, eval_methods=eval_methods, n_iterations=n_iterations,
+                         iteration_to_import=iteration_to_import, name_to_import=name_to_import,
+                         chief_cls=Chief, eval_agent_cls=EvalAgentDeepCFR)
+
+        def _is_cuda(device):
+            return (
+                (isinstance(device, torch.device) and device.type == "cuda")
+                or (isinstance(device, str) and device.startswith("cuda"))
+            )
+
+        try:
+            total_gpu = ray.cluster_resources().get("GPU", 0)
+        except Exception:
+            total_gpu = 0
+
+        cuda_available = torch.cuda.is_available()
+        ray_has_gpu = total_gpu > 0
+
+        adv_device = resolve_device(t_prof.module_args["adv_training"].device_training)
+        inf_device = resolve_device(t_prof.device_inference)
+        ps_device = resolve_device(t_prof.device_parameter_server)
+
+        def _ensure_device(dev, name):
+            if _is_cuda(dev) and (not cuda_available or not ray_has_gpu):
+                warnings.warn(
+                    f"CUDA device requested for {name} but GPUs are unavailable; falling back to CPU.",
+                    RuntimeWarning,
+                )
+                return torch.device("cpu")
+            return dev
+
+        adv_device = _ensure_device(adv_device, "adv_training")
+        inf_device = _ensure_device(inf_device, "inference")
+        ps_device = _ensure_device(ps_device, "parameter_server")
+
+        la_uses_gpu = _is_cuda(adv_device) or _is_cuda(inf_device)
+        ps_uses_gpu = _is_cuda(ps_device)
+        eval_uses_gpu = _is_cuda(inf_device)
+
+        la_gpu_workers = t_prof.n_learner_actors if la_uses_gpu else 0
+        ps_gpu_workers = t_prof.n_seats if ps_uses_gpu else 0
+        eval_gpu_workers = len(eval_methods) if eval_uses_gpu else 0
+        gpu_workers = la_gpu_workers + ps_gpu_workers + eval_gpu_workers
+        gpu_fraction = min(1.0, total_gpu / gpu_workers) if gpu_workers > 0 else 0
 
         if getattr(t_prof, "tb_writer", None) is not None:
             try:

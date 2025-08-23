@@ -40,6 +40,8 @@ class TrainingProfile(TrainingProfileBase):
                  DISTRIBUTED=False,
                  CLUSTER=False,
                  DEBUGGING=False,
+                 memory_per_worker=None,  # bytes per Ray worker; 0 disables limit
+                 memory_per_worker_multiplier=1.0,  # scale auto or explicit memory for large models
                  object_store_memory=None,
 
                  # ------ Env
@@ -264,6 +266,8 @@ class TrainingProfile(TrainingProfileBase):
         self.max_n_las_sync_simultaneously = max_n_las_sync_simultaneously
 
         self.device_parameter_server = device_parameter_server
+        self.memory_per_worker = memory_per_worker
+        self.memory_per_worker_multiplier = memory_per_worker_multiplier
 
     def __getstate__(self):
         state = self.__dict__.copy()

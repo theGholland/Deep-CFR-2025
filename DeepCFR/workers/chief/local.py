@@ -2,6 +2,7 @@ import copy
 import os
 import pickle
 import re
+import tempfile
 from os.path import join as ospj
 
 import psutil
@@ -60,7 +61,13 @@ class Chief(_ChiefBase):
     # __________________________________________________ Logging API ___________________________________________________
     def create_experiment(self, name):
         sanitized = re.sub(r"[^\w.-]", "_", name)
-        log_dir = ospj(self._t_prof.path_log_storage, sanitized)
+        base_dir = self._t_prof.path_log_storage
+        if base_dir is None:
+            base_dir = tempfile.mkdtemp(prefix="deepcfr_logs_")
+            self._t_prof.path_log_storage = base_dir
+            if self._t_prof.log_verbose:
+                print(f"No log storage path set; using temporary directory {base_dir}")
+        log_dir = ospj(base_dir, sanitized)
         os.makedirs(log_dir, exist_ok=True)
         writer = SummaryWriter(log_dir=log_dir, flush_secs=5, max_queue=10)
         if self._t_prof.log_verbose:

@@ -11,6 +11,7 @@ import ray
 import torch
 import re
 import shutil
+import warnings
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 from DeepCFR.utils.device import resolve_device
@@ -57,9 +58,25 @@ class Driver(DriverBase):
         except Exception:
             total_gpu = 0
 
+        cuda_available = torch.cuda.is_available()
+        ray_has_gpu = total_gpu > 0
+
         adv_device = resolve_device(t_prof.module_args["adv_training"].device_training)
         inf_device = resolve_device(t_prof.device_inference)
         ps_device = resolve_device(t_prof.device_parameter_server)
+
+        def _ensure_device(dev, name):
+            if _is_cuda(dev) and (not cuda_available or not ray_has_gpu):
+                warnings.warn(
+                    f"CUDA device requested for {name} but GPUs are unavailable; falling back to CPU.",
+                    RuntimeWarning,
+                )
+                return torch.device("cpu")
+            return dev
+
+        adv_device = _ensure_device(adv_device, "adv_training")
+        inf_device = _ensure_device(inf_device, "inference")
+        ps_device = _ensure_device(ps_device, "parameter_server")
 
         la_uses_gpu = _is_cuda(adv_device) or _is_cuda(inf_device)
         ps_uses_gpu = _is_cuda(ps_device)

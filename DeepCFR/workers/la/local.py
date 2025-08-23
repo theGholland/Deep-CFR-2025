@@ -4,6 +4,7 @@ import time
 
 import psutil
 import torch
+import logging
 
 from DeepCFR.IterationStrategy import IterationStrategy
 from DeepCFR.EvalAgentDeepCFR import EvalAgentDeepCFR
@@ -98,6 +99,15 @@ class LearnerActor(WorkerBase):
                 self._gpu_device = dev
                 break
 
+        self._gpu_metrics_available = True
+        if self._gpu_device is not None:
+            try:
+                torch.cuda.memory_reserved(self._gpu_device)
+                torch.cuda.utilization(self._gpu_device)
+            except Exception as e:
+                logging.warning(f"GPU metrics unavailable: {e}")
+                self._gpu_metrics_available = False
+
         self._perf_log_interval = 10
         self._perf_metrics = {
             "generate_data": {"time": 0.0, "cpu": 0.0, "gpu_mem": 0.0, "gpu_util": 0.0, "count": 0, "total": 0},
@@ -153,9 +163,13 @@ class LearnerActor(WorkerBase):
         duration = time.perf_counter() - t_start
         cpu = process.cpu_percent()
         gpu_mem = gpu_util = 0.0
-        if self._gpu_device is not None:
-            gpu_mem = torch.cuda.memory_reserved(self._gpu_device)
-            gpu_util = torch.cuda.utilization(self._gpu_device)
+        if self._gpu_device is not None and self._gpu_metrics_available:
+            try:
+                gpu_mem = torch.cuda.memory_reserved(self._gpu_device)
+                gpu_util = torch.cuda.utilization(self._gpu_device)
+            except Exception as e:
+                logging.warning(f"Failed to query GPU metrics: {e}")
+                self._gpu_metrics_available = False
 
         m = self._perf_metrics["generate_data"]
         m["time"] += duration
@@ -171,7 +185,7 @@ class LearnerActor(WorkerBase):
                              self._exp_perf_handle, "GenerateData/Time", m["total"], avg_time)
             self._ray.remote(self._chief_handle.add_scalar,
                              self._exp_perf_handle, "GenerateData/CPU", m["total"], avg_cpu)
-            if self._gpu_device is not None:
+            if self._gpu_device is not None and self._gpu_metrics_available:
                 avg_mem = m["gpu_mem"] / m["count"]
                 avg_util = m["gpu_util"] / m["count"]
                 self._ray.remote(self._chief_handle.add_scalar,
@@ -227,9 +241,13 @@ class LearnerActor(WorkerBase):
         duration = time.perf_counter() - t_start
         cpu = process.cpu_percent()
         gpu_mem = gpu_util = 0.0
-        if self._gpu_device is not None:
-            gpu_mem = torch.cuda.memory_reserved(self._gpu_device)
-            gpu_util = torch.cuda.utilization(self._gpu_device)
+        if self._gpu_device is not None and self._gpu_metrics_available:
+            try:
+                gpu_mem = torch.cuda.memory_reserved(self._gpu_device)
+                gpu_util = torch.cuda.utilization(self._gpu_device)
+            except Exception as e:
+                logging.warning(f"Failed to query GPU metrics: {e}")
+                self._gpu_metrics_available = False
 
         m = self._perf_metrics["update"]
         m["time"] += duration
@@ -245,7 +263,7 @@ class LearnerActor(WorkerBase):
                              self._exp_perf_handle, "Update/Time", m["total"], avg_time)
             self._ray.remote(self._chief_handle.add_scalar,
                              self._exp_perf_handle, "Update/CPU", m["total"], avg_cpu)
-            if self._gpu_device is not None:
+            if self._gpu_device is not None and self._gpu_metrics_available:
                 avg_mem = m["gpu_mem"] / m["count"]
                 avg_util = m["gpu_util"] / m["count"]
                 self._ray.remote(self._chief_handle.add_scalar,

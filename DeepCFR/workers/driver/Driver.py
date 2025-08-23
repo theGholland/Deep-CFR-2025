@@ -29,9 +29,18 @@ class Driver(DriverBase):
             from DeepCFR.workers.la.local import LearnerActor
             from DeepCFR.workers.ps.local import ParameterServer
 
-        total_cpu = psutil.cpu_count() or 1
+        try:
+            total_cpu = int(ray.cluster_resources().get("CPU", 0))
+        except Exception:
+            total_cpu = 0
+        if total_cpu <= 0:
+            try:
+                total_cpu = len(os.sched_getaffinity(0))
+            except Exception:
+                total_cpu = 1
+
         desired_actors = t_prof.n_learner_actors + t_prof.n_seats + len(eval_methods) + 1  # +1 for Chief
-        cpu_fraction = total_cpu / desired_actors
+        cpu_fraction = total_cpu / max(1, desired_actors)
         MaybeRay._default_num_cpus = cpu_fraction
 
         # Memory reservation per Ray worker.  If ``memory_per_worker`` is 0 we

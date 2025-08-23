@@ -19,6 +19,46 @@ from DeepCFR.utils.device import resolve_device
 
 class Driver(DriverBase):
 
+    @staticmethod
+    def _get_total_memory():
+        """Return total system memory in bytes.
+
+        Prefers Ray's reported resources but falls back to Ray's
+        ``get_system_memory`` utility which respects cgroup limits.  Only if
+        both mechanisms fail do we consult ``psutil`` as a last resort.
+        """
+        try:
+            total_mem = int(ray.cluster_resources().get("memory", 0))
+            if total_mem > 0:
+                return total_mem
+        except Exception:
+            pass
+        try:
+            from ray._private.utils import get_system_memory
+
+            total_mem = int(get_system_memory())
+            if total_mem > 0:
+                return total_mem
+        except Exception:
+            pass
+        return int(psutil.virtual_memory().total)
+
+    @classmethod
+    def _calc_memory_per_worker(cls, t_prof):
+        if t_prof.memory_per_worker == 0:
+            return None
+        if t_prof.memory_per_worker is None:
+            total_mem = cls._get_total_memory()
+            ray_mem = min(2 * (10 ** 10), int(total_mem * 0.8))
+            n_mem_workers = t_prof.n_learner_actors + t_prof.n_seats
+            memory_per_worker = int(ray_mem / max(1, n_mem_workers))
+        else:
+            memory_per_worker = int(t_prof.memory_per_worker)
+        memory_per_worker = int(memory_per_worker * t_prof.memory_per_worker_multiplier)
+        if memory_per_worker <= 0:
+            return None
+        return memory_per_worker
+
     def __init__(self, t_prof, eval_methods, n_iterations=None, iteration_to_import=None, name_to_import=None):
         if t_prof.DISTRIBUTED:
             from DeepCFR.workers.chief.dist import Chief
@@ -38,19 +78,7 @@ class Driver(DriverBase):
         # omit the reservation entirely.  Otherwise we either compute a default
         # from available RAM or use the explicit value, scaling by
         # ``memory_per_worker_multiplier`` to support larger models.
-        if t_prof.memory_per_worker == 0:
-            memory_per_worker = None
-        else:
-            if t_prof.memory_per_worker is None:
-                total_mem = psutil.virtual_memory().total
-                ray_mem = min(2 * (10 ** 10), int(total_mem * 0.8))
-                n_mem_workers = t_prof.n_learner_actors + t_prof.n_seats
-                memory_per_worker = int(ray_mem / max(1, n_mem_workers))
-            else:
-                memory_per_worker = int(t_prof.memory_per_worker)
-            memory_per_worker = int(memory_per_worker * t_prof.memory_per_worker_multiplier)
-            if memory_per_worker <= 0:
-                memory_per_worker = None
+        memory_per_worker = self._calc_memory_per_worker(t_prof)
         memory_per_la = memory_per_worker
         memory_per_ps = memory_per_worker
 

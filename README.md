@@ -131,6 +131,16 @@ TensorBoard via `GenerateData/*` and `Update/*` tags in the corresponding `*_Per
 To tune performance, watch these graphs while adjusting the `TrainingProfile`'s `num_cpus` and `num_gpus` values per
 actor.  Underutilized CPUs or GPUs suggest lowering the respective counts to schedule more actors, whereas sustained
 values near 100% indicate a need for more resources or fewer workers per machine.
+
+### Controlling per-actor memory
+Ray kills workers that exceed their reserved memory.  By default the driver
+divides roughly 80% of system RAM equally among learner-actors and parameter
+servers.  Pass `memory_per_worker` to `TrainingProfile` to override this
+allocation or set it to `0` to disable the limit entirely.  You can also scale
+the automatic estimate for larger models with
+`memory_per_worker_multiplier`.  Increasing these values helps prevent
+premature actor death when networks require more RAM than the default
+reservation.
                                          
 
 ## Cloud & Clusters

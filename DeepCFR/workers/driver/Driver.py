@@ -36,7 +36,10 @@ class Driver(DriverBase):
 
         total_mem = psutil.virtual_memory().total
         ray_mem = min(2 * (10 ** 10), int(total_mem * 0.8))
-        memory_per_la = ray_mem / max(1, t_prof.n_learner_actors)
+        n_mem_workers = t_prof.n_learner_actors + t_prof.n_seats
+        memory_per_worker = int(ray_mem / max(1, n_mem_workers))
+        memory_per_la = memory_per_worker
+        memory_per_ps = memory_per_worker
 
         super().__init__(t_prof=t_prof, eval_methods=eval_methods, n_iterations=n_iterations,
                          iteration_to_import=iteration_to_import, name_to_import=name_to_import,
@@ -187,6 +190,7 @@ class Driver(DriverBase):
         self._la_uses_gpu = la_uses_gpu
         self._ps_uses_gpu = ps_uses_gpu
         self._memory_per_la = memory_per_la
+        self._memory_per_ps = memory_per_ps
 
         if "h2h" in list(eval_methods.keys()):
             assert EvalAgentDeepCFR.EVAL_MODE_SINGLE in t_prof.eval_modes_of_algo
@@ -216,6 +220,7 @@ class Driver(DriverBase):
                 self.chief_handle,
                 num_gpus=self._gpu_fraction if self._ps_uses_gpu else 0,
                 num_cpus=self._cpu_fraction,
+                memory=self._memory_per_ps,
             )
             for p in range(t_prof.n_seats)
         ]

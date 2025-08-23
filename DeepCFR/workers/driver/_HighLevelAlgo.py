@@ -69,6 +69,11 @@ class HighLevelAlgo(_HighLevelAlgoBase):
                 print(f"Parameter server {actor_hex} failed. Removing handle.")
                 self._ps_handles[i] = None
 
+        if not self._la_handles:
+            msg = "No learner actors remaining. Terminating training."
+            print(msg)
+            raise RuntimeError(msg)
+
     def init(self):
         # """"""""""""""""""""""
         # Deep CFR

@@ -350,6 +350,8 @@ class Driver(DriverBase):
                 # Checkpoint
                 # """"""""""""""""
                 self.periodically_checkpoint()
+        except RuntimeError as e:
+            print(f"Training stopped: {e}")
         finally:
             try:
                 self._ray.wait([self._ray.remote(self.chief_handle.flush_tb_writers)])

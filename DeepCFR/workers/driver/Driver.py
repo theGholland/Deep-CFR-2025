@@ -150,17 +150,40 @@ class Driver(DriverBase):
                 or (isinstance(device, str) and device.startswith("cuda"))
             )
 
-        try:
-            total_gpu = ray.cluster_resources().get("GPU", 0)
-        except Exception:
+        adv_spec = t_prof.module_args["adv_training"].device_training
+        inf_spec = t_prof.device_inference
+        ps_spec = t_prof.device_parameter_server
+
+        any_cuda_requested = any(
+            _is_cuda(d) for d in (adv_spec, inf_spec, ps_spec)
+        )
+
+        if any_cuda_requested:
+            try:
+                total_gpu = ray.cluster_resources().get("GPU", 0)
+            except Exception:
+                total_gpu = 0
+            try:
+                cuda_available = torch.cuda.is_available()
+            except Exception:
+                cuda_available = False
+            ray_has_gpu = total_gpu > 0
+
+            def _resolve(spec):
+                if isinstance(spec, str) and spec.lower() == "auto":
+                    spec = "cuda" if (cuda_available and ray_has_gpu) else "cpu"
+                return resolve_device(spec)
+        else:
             total_gpu = 0
+            cuda_available = False
+            ray_has_gpu = False
 
-        cuda_available = torch.cuda.is_available()
-        ray_has_gpu = total_gpu > 0
+            def _resolve(_):
+                return torch.device("cpu")
 
-        adv_device = resolve_device(t_prof.module_args["adv_training"].device_training)
-        inf_device = resolve_device(t_prof.device_inference)
-        ps_device = resolve_device(t_prof.device_parameter_server)
+        adv_device = _resolve(adv_spec)
+        inf_device = _resolve(inf_spec)
+        ps_device = _resolve(ps_spec)
 
         def _ensure_device(dev, name):
             if _is_cuda(dev) and (not cuda_available or not ray_has_gpu):

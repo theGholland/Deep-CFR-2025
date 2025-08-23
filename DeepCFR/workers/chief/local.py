@@ -82,11 +82,12 @@ class Chief(_ChiefBase):
                 pass
 
     def close_tb_writers(self):
-        for w in self._writers.values():
+        for key in list(self._writers.keys()):
             try:
-                w.close()
+                self._writers[key].close()
             except Exception:
                 pass
+            del self._writers[key]
 
     # ____________________________________________________ Strategy ____________________________________________________
     def pull_current_eval_strategy(self, last_iteration_receiver_has):

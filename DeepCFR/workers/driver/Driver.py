@@ -146,7 +146,7 @@ class Driver(DriverBase):
         ps_gpu_workers = t_prof.n_seats if ps_uses_gpu else 0
         eval_gpu_workers = len(eval_methods) if eval_uses_gpu else 0
         gpu_workers = la_gpu_workers + ps_gpu_workers + eval_gpu_workers
-        gpu_fraction = min(1.0, total_gpu / gpu_workers) if gpu_workers > 0 else 0
+        gpu_fraction = total_gpu / max(1, gpu_workers)
 
         if getattr(t_prof, "tb_writer", None) is not None:
             try:

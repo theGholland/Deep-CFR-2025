@@ -1,5 +1,7 @@
 import time
 
+import ray
+
 from DeepCFR.EvalAgentDeepCFR import EvalAgentDeepCFR
 from PokerRL.rl.base_cls.HighLevelAlgoBase import HighLevelAlgoBase as _HighLevelAlgoBase
 
@@ -30,6 +32,42 @@ class HighLevelAlgo(_HighLevelAlgoBase):
         else:
             self._exp_adv_loss_handles = None
             self._exp_avrg_loss_handles = None
+
+    def _safe_wait(self, obj_refs):
+        try:
+            return self._ray.wait(obj_refs)
+        except ray.exceptions.RayActorError as e:
+            self._handle_actor_error(e)
+            return [], []
+
+    def _safe_get(self, obj_refs):
+        try:
+            return self._ray.get(obj_refs)
+        except ray.exceptions.RayActorError as e:
+            self._handle_actor_error(e)
+            return []
+
+    def _handle_actor_error(self, exc):
+        actor_id = getattr(exc, "actor_id", None)
+        if actor_id is None:
+            return
+        actor_hex = actor_id.hex() if hasattr(actor_id, "hex") else actor_id
+
+        alive_las = [la for la in self._la_handles if la._actor_id.hex() != actor_hex]
+        if len(alive_las) != len(self._la_handles):
+            print(f"Learner actor {actor_hex} failed. Removing handle.")
+            self._la_handles = alive_las
+            try:
+                self._ray.wait([
+                    self._ray.remote(self._chief_handle.update_alive_las, self._la_handles)
+                ])
+            except ray.exceptions.RayActorError:
+                print("Chief actor failed while updating alive learner actors.")
+
+        for i, h in enumerate(self._ps_handles):
+            if h is not None and h._actor_id.hex() == actor_hex:
+                print(f"Parameter server {actor_hex} failed. Removing handle.")
+                self._ps_handles[i] = None
 
     def init(self):
         # """"""""""""""""""""""
@@ -93,8 +131,11 @@ class HighLevelAlgo(_HighLevelAlgoBase):
         t_computation = 0.0
         t_syncing = 0.0
 
-        self._ray.wait([
-            self._ray.remote(self._ps_handles[p_id].reset_adv_net, cfr_iter)
+        ps = self._ps_handles[p_id]
+        if ps is None:
+            return t_computation, t_syncing
+        self._safe_wait([
+            self._ray.remote(ps.reset_adv_net, cfr_iter)
         ])
         self._update_leaner_actors(update_adv_for_plyrs=[p_id])
 
@@ -114,14 +155,20 @@ class HighLevelAlgo(_HighLevelAlgoBase):
 
             # Applying gradients
             t0 = time.time()
-            self._ray.wait([
-                self._ray.remote(self._ps_handles[p_id].apply_grads_adv,
+            ps = self._ps_handles[p_id]
+            if ps is None:
+                return t_computation, t_syncing
+            self._safe_wait([
+                self._ray.remote(ps.apply_grads_adv,
                                  grads_from_all_las)
             ])
 
             # Step LR scheduler
-            self._ray.wait([
-                self._ray.remote(self._ps_handles[p_id].step_scheduler_adv,
+            ps = self._ps_handles[p_id]
+            if ps is None:
+                return t_computation, t_syncing
+            self._safe_wait([
+                self._ray.remote(ps.step_scheduler_adv,
                                  _averaged_loss)
             ])
 
@@ -130,7 +177,7 @@ class HighLevelAlgo(_HighLevelAlgoBase):
 
             # log current loss
             if self._t_prof.log_verbose and ((epoch_nr + 1) % SMOOTHING == 0):
-                self._ray.wait([
+                self._safe_wait([
                     self._ray.remote(
                         self._chief_handle.add_scalar,
                         self._exp_adv_loss_handles[p_id],
@@ -151,9 +198,9 @@ class HighLevelAlgo(_HighLevelAlgoBase):
                              p_id)
             for la in self._la_handles
         ]
-        self._ray.wait(grads)
+        self._safe_wait(grads)
 
-        losses = self._ray.get([
+        losses = self._safe_get([
             self._ray.remote(la.get_loss_last_batch_adv,
                              p_id)
             for la in self._la_handles
@@ -167,7 +214,7 @@ class HighLevelAlgo(_HighLevelAlgoBase):
         return grads, averaged_loss
 
     def _generate_traversals(self, p_id, cfr_iter):
-        self._ray.wait([
+        self._safe_wait([
             self._ray.remote(la.generate_data,
                              p_id, cfr_iter)
             for la in self._la_handles
@@ -207,14 +254,16 @@ class HighLevelAlgo(_HighLevelAlgoBase):
         w_adv = [None for _ in range(self._t_prof.n_seats)]
         w_avrg = [None for _ in range(self._t_prof.n_seats)]
         for p_id in range(self._t_prof.n_seats):
-            w_adv[p_id] = None if not _update_adv_per_p[p_id] else self._ray.remote(
-                self._ps_handles[p_id].get_adv_weights)
+            ps = self._ps_handles[p_id]
+            w_adv[p_id] = None if (not _update_adv_per_p[p_id] or ps is None) else self._ray.remote(
+                ps.get_adv_weights)
 
-            w_avrg[p_id] = None if not _update_avrg_per_p[p_id] else self._ray.remote(
-                self._ps_handles[p_id].get_avrg_weights)
+            ps = self._ps_handles[p_id]
+            w_avrg[p_id] = None if (not _update_avrg_per_p[p_id] or ps is None) else self._ray.remote(
+                ps.get_avrg_weights)
 
         for batch in la_batches:
-            self._ray.wait([
+            self._safe_wait([
                 self._ray.remote(la.update,
                                  w_adv,
                                  w_avrg)
@@ -223,10 +272,13 @@ class HighLevelAlgo(_HighLevelAlgoBase):
 
     # ____________ SINGLE only
     def _push_newest_adv_net_to_chief(self, p_id, cfr_iter):
-        self._ray.wait([self._ray.remote(self._chief_handle.add_new_iteration_strategy_model,
-                                         p_id,
-                                         self._ray.remote(self._ps_handles[p_id].get_adv_weights),
-                                         cfr_iter)])
+        ps = self._ps_handles[p_id]
+        if ps is None:
+            return
+        self._safe_wait([self._ray.remote(self._chief_handle.add_new_iteration_strategy_model,
+                                          p_id,
+                                          self._ray.remote(ps.get_adv_weights),
+                                          cfr_iter)])
 
     # ____________ AVRG only
     def _get_avrg_gradients(self, p_id):
@@ -235,9 +287,9 @@ class HighLevelAlgo(_HighLevelAlgoBase):
                              p_id)
             for la in self._la_handles
         ]
-        self._ray.wait(grads)
+        self._safe_wait(grads)
 
-        losses = self._ray.get([
+        losses = self._safe_get([
             self._ray.remote(la.get_loss_last_batch_avrg,
                              p_id)
             for la in self._la_handles
@@ -254,7 +306,10 @@ class HighLevelAlgo(_HighLevelAlgoBase):
         t_computation = 0.0
         t_syncing = 0.0
 
-        self._ray.wait([self._ray.remote(self._ps_handles[p_id].reset_avrg_net)])
+        ps = self._ps_handles[p_id]
+        if ps is None:
+            return t_computation, t_syncing
+        self._safe_wait([self._ray.remote(ps.reset_avrg_net)])
         self._update_leaner_actors(update_avrg_for_plyrs=[p_id])
 
         SMOOTHING = 200
@@ -275,14 +330,20 @@ class HighLevelAlgo(_HighLevelAlgoBase):
 
                 # Applying gradients
                 t0 = time.time()
-                self._ray.wait([
-                    self._ray.remote(self._ps_handles[p_id].apply_grads_avrg,
+                ps = self._ps_handles[p_id]
+                if ps is None:
+                    return t_computation, t_syncing
+                self._safe_wait([
+                    self._ray.remote(ps.apply_grads_avrg,
                                      grads_from_all_las)
                 ])
 
                 # Step LR scheduler
-                self._ray.wait([
-                    self._ray.remote(self._ps_handles[p_id].step_scheduler_avrg,
+                ps = self._ps_handles[p_id]
+                if ps is None:
+                    return t_computation, t_syncing
+                self._safe_wait([
+                    self._ray.remote(ps.step_scheduler_avrg,
                                      _averaged_loss)
                 ])
 
@@ -291,7 +352,7 @@ class HighLevelAlgo(_HighLevelAlgoBase):
 
                 # log current loss
                 if self._t_prof.log_verbose and ((epoch_nr + 1) % SMOOTHING == 0):
-                    self._ray.wait([
+                    self._safe_wait([
                         self._ray.remote(
                             self._chief_handle.add_scalar,
                             self._exp_avrg_loss_handles[p_id],

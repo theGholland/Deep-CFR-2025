@@ -25,12 +25,15 @@ class AdvWrapper(_NetWrapperBase):
             return self._net(pub_obses=pub_obses, range_idxs=range_idxs, legal_action_masks=legal_action_mask)
 
     def _mini_batch_loop(self, buffer, grad_mngr):
+        sample = buffer.sample(device=self.device, batch_size=self._batch_size)
+        if sample is None:
+            return
         batch_pub_obs, \
         batch_range_idxs, \
         batch_legal_action_masks, \
         batch_adv, \
         batch_loss_weight, \
-            = buffer.sample(device=self.device, batch_size=self._batch_size)
+            = sample
 
         # [batch_size, n_actions]
         adv_pred = self._net(pub_obses=batch_pub_obs,

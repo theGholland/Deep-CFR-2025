@@ -327,12 +327,16 @@ class LearnerActor(WorkerBase):
         return self._avrg_wrappers[p_id].loss_last_batch
 
     def get_adv_grads(self, p_id):
-        return self._ray.grads_to_numpy(
-            self._adv_wrappers[p_id].get_grads_one_batch_from_buffer(buffer=self._adv_buffers[p_id]))
+        grads = self._adv_wrappers[p_id].get_grads_one_batch_from_buffer(buffer=self._adv_buffers[p_id])
+        if grads is None:
+            return None
+        return self._ray.grads_to_numpy(grads)
 
     def get_avrg_grads(self, p_id):
-        return self._ray.grads_to_numpy(
-            self._avrg_wrappers[p_id].get_grads_one_batch_from_buffer(buffer=self._avrg_buffers[p_id]))
+        grads = self._avrg_wrappers[p_id].get_grads_one_batch_from_buffer(buffer=self._avrg_buffers[p_id])
+        if grads is None:
+            return None
+        return self._ray.grads_to_numpy(grads)
 
     def checkpoint(self, curr_step):
         for p_id in range(self._env_bldr.N_SEATS):

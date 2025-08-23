@@ -102,6 +102,9 @@ class HighLevelAlgo(_HighLevelAlgoBase):
         accumulated_averaged_loss = 0.0
         for epoch_nr in range(self._adv_args.n_batches_adv_training):
             t0 = time.time()
+            global_step = (
+                cfr_iter * self._adv_args.n_batches_adv_training + epoch_nr
+            )
 
             # Compute gradients
             grads_from_all_las, _averaged_loss = self._get_adv_gradients(p_id=p_id)
@@ -132,7 +135,7 @@ class HighLevelAlgo(_HighLevelAlgoBase):
                         self._chief_handle.add_scalar,
                         self._exp_adv_loss_handles[p_id],
                         "DCFR_NN_Losses/Advantage",
-                        epoch_nr,
+                        global_step,
                         accumulated_averaged_loss / SMOOTHING,
                     )
                 ])
@@ -260,6 +263,9 @@ class HighLevelAlgo(_HighLevelAlgoBase):
         if cfr_iter > 0:
             for epoch_nr in range(self._avrg_args.n_batches_avrg_training):
                 t0 = time.time()
+                global_step = (
+                    cfr_iter * self._adv_args.n_batches_adv_training + epoch_nr
+                )
 
                 # Compute gradients
                 grads_from_all_las, _averaged_loss = self._get_avrg_gradients(p_id=p_id)
@@ -290,7 +296,7 @@ class HighLevelAlgo(_HighLevelAlgoBase):
                             self._chief_handle.add_scalar,
                             self._exp_avrg_loss_handles[p_id],
                             "DCFR_NN_Losses/Average",
-                            epoch_nr,
+                            global_step,
                             accumulated_averaged_loss / SMOOTHING,
                         )
                     ])

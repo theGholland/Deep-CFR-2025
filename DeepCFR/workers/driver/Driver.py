@@ -163,27 +163,29 @@ class Driver(DriverBase):
                 s.bind(("", 0))
                 return s.getsockname()[1]
 
-        tb_port = _get_free_port()
-        tb_cmd = [
-            "tensorboard",
-            "--logdir",
-            t_prof.path_log_storage,
-            "--host",
-            "0.0.0.0",
-            "--port",
-            str(tb_port),
-        ]
-        try:
-            self._tb_proc = subprocess.Popen(
-                tb_cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.STDOUT,
-            )
-            self._tb_port = tb_port
-            print(f"TensorBoard listening on http://0.0.0.0:{tb_port}/")
-        except Exception as ex:
-            self._tb_proc = None
-            print(f"Failed to start TensorBoard: {ex}")
+        self._tb_proc = None
+        if t_prof.log_verbose:
+            tb_port = _get_free_port()
+            tb_cmd = [
+                "tensorboard",
+                "--logdir",
+                t_prof.path_log_storage,
+                "--host",
+                "0.0.0.0",
+                "--port",
+                str(tb_port),
+            ]
+            try:
+                self._tb_proc = subprocess.Popen(
+                    tb_cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.STDOUT,
+                )
+                self._tb_port = tb_port
+                print(f"TensorBoard listening on http://0.0.0.0:{tb_port}/")
+            except Exception as ex:
+                self._tb_proc = None
+                print(f"Failed to start TensorBoard: {ex}")
 
         self._cpu_fraction = cpu_fraction
         self._gpu_fraction = gpu_fraction

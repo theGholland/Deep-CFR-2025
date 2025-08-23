@@ -193,12 +193,14 @@ class HighLevelAlgo(_HighLevelAlgoBase):
         return t_computation, t_syncing
 
     def _get_adv_gradients(self, p_id):
-        grads = [
+        grads_refs = [
             self._ray.remote(la.get_adv_grads,
                              p_id)
             for la in self._la_handles
         ]
-        self._safe_wait(grads)
+        self._safe_wait(grads_refs)
+        grads_vals = self._safe_get(grads_refs)
+        grads_refs = [ref for ref, val in zip(grads_refs, grads_vals) if val is not None]
 
         losses = self._safe_get([
             self._ray.remote(la.get_loss_last_batch_adv,
@@ -211,7 +213,7 @@ class HighLevelAlgo(_HighLevelAlgoBase):
         n = len(losses)
         averaged_loss = sum(losses) / float(n) if n > 0 else -1
 
-        return grads, averaged_loss
+        return grads_refs, averaged_loss
 
     def _generate_traversals(self, p_id, cfr_iter):
         self._safe_wait([
@@ -282,12 +284,14 @@ class HighLevelAlgo(_HighLevelAlgoBase):
 
     # ____________ AVRG only
     def _get_avrg_gradients(self, p_id):
-        grads = [
+        grads_refs = [
             self._ray.remote(la.get_avrg_grads,
                              p_id)
             for la in self._la_handles
         ]
-        self._safe_wait(grads)
+        self._safe_wait(grads_refs)
+        grads_vals = self._safe_get(grads_refs)
+        grads_refs = [ref for ref, val in zip(grads_refs, grads_vals) if val is not None]
 
         losses = self._safe_get([
             self._ray.remote(la.get_loss_last_batch_avrg,
@@ -300,7 +304,7 @@ class HighLevelAlgo(_HighLevelAlgoBase):
         n = len(losses)
         averaged_loss = sum(losses) / float(n) if n > 0 else -1
 
-        return grads, averaged_loss
+        return grads_refs, averaged_loss
 
     def _train_avrg(self, p_id, cfr_iter):
         t_computation = 0.0

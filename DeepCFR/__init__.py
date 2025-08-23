@@ -29,12 +29,18 @@ try:  # pragma: no cover - best effort patching
             # from crashing when CUDA is present but resources have not been
             # declared explicitly.
             total_mem = psutil.virtual_memory().total
+            obj_mem = getattr(MaybeRay, "_object_store_memory", None)
+            if obj_mem is None:
+                obj_mem = int(total_mem * 0.4)
+            elif isinstance(obj_mem, float) and 0 < obj_mem < 1:
+                obj_mem = int(total_mem * obj_mem)
             ray_init_kwargs = {
-                # Reserve only 20% of RAM for Ray's object store so that roughly
-                # 80% remains available for actors and tasks.  Using a
-                # percentage instead of a fixed value adapts to different
-                # machine sizes automatically.
-                "object_store_memory": int(total_mem * 0.2),
+                # Allow configuration of Ray's object store memory via
+                # ``TrainingProfile``.  If unset, reserve roughly 40% of system
+                # RAM for the object store so that the remainder stays
+                # available for actors and tasks.  Passing a float between 0
+                # and 1 will be interpreted as a fraction of total memory.
+                "object_store_memory": int(obj_mem),
                 "num_cpus": psutil.cpu_count() or 1,
                 # Ray 2.x already exposes a built-in ``memory`` resource for
                 # scheduling and no longer allows configuring it via the
@@ -66,6 +72,7 @@ try:  # pragma: no cover - best effort patching
     # setting ``MaybeRay._default_num_cpus`` before creating any actors.
     MaybeRay._default_num_cpus = 1
     MaybeRay._default_num_gpus = 0
+    MaybeRay._object_store_memory = None
 
     def _create_worker(self, cls, *args, num_gpus=0, num_cpus=None, memory=None):
         """Create a Ray actor with optional resource allocation.

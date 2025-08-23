@@ -52,11 +52,13 @@ try:  # pragma: no cover - best effort patching
             }
 
             ray.init(**ray_init_kwargs)
-            try:
-                MaybeRay._default_num_gpus = int(
-                    ray.cluster_resources().get("GPU", 0)
-                )
-            except Exception:  # pragma: no cover - best effort GPU detection
+            try:  # pragma: no cover - best effort GPU detection
+                # Detect presence of GPUs but do not reserve them by default.
+                # Callers must explicitly request GPU resources when creating
+                # actors so that multiple workers can share the available
+                # devices without contention.
+                ray.cluster_resources().get("GPU", 0)
+            finally:
                 MaybeRay._default_num_gpus = 0
     MaybeRay.init_local = _init_local
 
@@ -65,14 +67,13 @@ try:  # pragma: no cover - best effort patching
     MaybeRay._default_num_cpus = 1
     MaybeRay._default_num_gpus = 0
 
-    def _create_worker(self, cls, *args, num_gpus=None, num_cpus=None, memory=None):
-        """Create a Ray actor with optional resource allocation."""
+    def _create_worker(self, cls, *args, num_gpus=0, num_cpus=None, memory=None):
+        """Create a Ray actor with optional resource allocation.
+
+        GPU resources are not reserved automatically.  Actors that require a
+        GPU must specify ``num_gpus`` explicitly when created.
+        """
         if self.runs_distributed:
-            if num_gpus is None:
-                try:
-                    num_gpus = getattr(self, "_default_num_gpus", 0)
-                except Exception:  # pragma: no cover - best effort GPU detection
-                    num_gpus = 0
             if num_cpus is None:
                 num_cpus = getattr(self, "_default_num_cpus", 1)
             options_kwargs = {"num_gpus": num_gpus, "num_cpus": num_cpus}

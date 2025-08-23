@@ -37,11 +37,6 @@ class Driver(DriverBase):
         ray_mem = min(2 * (10 ** 10), int(total_mem * 0.8))
         memory_per_la = ray_mem / max(1, t_prof.n_learner_actors)
 
-        # Force CPU-only allocation for actors created by DriverBase (Chief and evaluators).
-        # These components do not require GPU resources and would otherwise reserve a
-        # fraction of the available GPUs when `eval_uses_gpu` is true.
-        MaybeRay._default_num_gpus = 0
-
         super().__init__(t_prof=t_prof, eval_methods=eval_methods, n_iterations=n_iterations,
                          iteration_to_import=iteration_to_import, name_to_import=name_to_import,
                          chief_cls=Chief, eval_agent_cls=EvalAgentDeepCFR)
@@ -70,10 +65,6 @@ class Driver(DriverBase):
         eval_gpu_workers = len(eval_methods) if eval_uses_gpu else 0
         gpu_workers = la_gpu_workers + ps_gpu_workers + eval_gpu_workers
         gpu_fraction = min(1.0, total_gpu / gpu_workers) if gpu_workers > 0 else 0
-
-        # Restore the default so subsequent workers that do require GPU can opt in
-        # by explicitly requesting it when created.
-        MaybeRay._default_num_gpus = gpu_fraction if eval_uses_gpu else 0
 
         # Determine Ray's log directory and configure TensorBoard
         #

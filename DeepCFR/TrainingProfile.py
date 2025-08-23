@@ -3,9 +3,11 @@
 
 import copy
 
+import psutil
 from PokerRL.game import bet_sets
 from PokerRL.game.games import DiscretizedNLLeduc
 from PokerRL.game.wrappers import HistoryEnvBuilder, FlatLimitPokerEnvBuilder
+from PokerRL.rl.MaybeRay import MaybeRay
 from PokerRL.rl.base_cls.TrainingProfileBase import TrainingProfileBase
 from PokerRL.rl.neural.AvrgStrategyNet import AvrgNetArgs
 from PokerRL.rl.neural.DuelingQNet import DuelingQArgs
@@ -40,6 +42,7 @@ class TrainingProfile(TrainingProfileBase):
                  DEBUGGING=False,
                  memory_per_worker=None,  # bytes per Ray worker; 0 disables limit
                  memory_per_worker_multiplier=1.0,  # scale auto or explicit memory for large models
+                 object_store_memory=None,
 
                  # ------ Env
                  game_cls=DiscretizedNLLeduc,
@@ -119,6 +122,14 @@ class TrainingProfile(TrainingProfileBase):
 
                  ):
         print(" ************************** Initing args for: ", name, "  **************************")
+        if object_store_memory is None:
+            total_mem = psutil.virtual_memory().total
+            object_store_memory = int(total_mem * 0.4)
+        elif isinstance(object_store_memory, float) and 0 < object_store_memory < 1:
+            total_mem = psutil.virtual_memory().total
+            object_store_memory = int(total_mem * object_store_memory)
+        self.object_store_memory = object_store_memory
+        MaybeRay._object_store_memory = object_store_memory
 
         if mini_batch_size_adv is None or mini_batch_size_avrg is None:
             est = estimate_batch_size()

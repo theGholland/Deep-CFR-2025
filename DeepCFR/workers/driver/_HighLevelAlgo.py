@@ -141,6 +141,7 @@ class HighLevelAlgo(_HighLevelAlgoBase):
 
         SMOOTHING = 200
         accumulated_averaged_loss = 0.0
+        accumulated_loss_count = 0
         for epoch_nr in range(self._adv_args.n_batches_adv_training):
             t0 = time.time()
             global_step = (
@@ -149,46 +150,54 @@ class HighLevelAlgo(_HighLevelAlgoBase):
 
             # Compute gradients
             grads_from_all_las, _averaged_loss = self._get_adv_gradients(p_id=p_id)
-            accumulated_averaged_loss += _averaged_loss
 
             t_computation += time.time() - t0
 
-            # Applying gradients
-            t0 = time.time()
-            ps = self._ps_handles[p_id]
-            if ps is None:
-                return t_computation, t_syncing
-            self._safe_wait([
-                self._ray.remote(ps.apply_grads_adv,
-                                 grads_from_all_las)
-            ])
+            if _averaged_loss is not None:
+                accumulated_averaged_loss += _averaged_loss
+                accumulated_loss_count += 1
 
-            # Step LR scheduler
-            ps = self._ps_handles[p_id]
-            if ps is None:
-                return t_computation, t_syncing
-            self._safe_wait([
-                self._ray.remote(ps.step_scheduler_adv,
-                                 _averaged_loss)
-            ])
+                # Applying gradients
+                t0 = time.time()
+                ps = self._ps_handles[p_id]
+                if ps is None:
+                    return t_computation, t_syncing
+                self._safe_wait([
+                    self._ray.remote(ps.apply_grads_adv,
+                                     grads_from_all_las)
+                ])
 
-            # update ADV on all las
-            self._update_leaner_actors(update_adv_for_plyrs=[p_id])
+                # Step LR scheduler
+                ps = self._ps_handles[p_id]
+                if ps is None:
+                    return t_computation, t_syncing
+                self._safe_wait([
+                    self._ray.remote(ps.step_scheduler_adv,
+                                     _averaged_loss)
+                ])
+
+                # update ADV on all las
+                self._update_leaner_actors(update_adv_for_plyrs=[p_id])
+
+                t_syncing += time.time() - t0
 
             # log current loss
-            if self._t_prof.log_verbose and ((epoch_nr + 1) % SMOOTHING == 0):
+            if (
+                self._t_prof.log_verbose
+                and ((epoch_nr + 1) % SMOOTHING == 0)
+                and accumulated_loss_count > 0
+            ):
                 self._safe_wait([
                     self._ray.remote(
                         self._chief_handle.add_scalar,
                         self._exp_adv_loss_handles[p_id],
                         "DCFR_NN_Losses/Advantage",
                         global_step,
-                        accumulated_averaged_loss / SMOOTHING,
+                        accumulated_averaged_loss / accumulated_loss_count,
                     )
                 ])
                 accumulated_averaged_loss = 0.0
-
-            t_syncing += time.time() - t0
+                accumulated_loss_count = 0
 
         return t_computation, t_syncing
 
@@ -208,8 +217,10 @@ class HighLevelAlgo(_HighLevelAlgoBase):
 
         losses = [loss for loss in losses if loss is not None]
 
-        n = len(losses)
-        averaged_loss = sum(losses) / float(n) if n > 0 else -1
+        if not losses:
+            return grads, None
+
+        averaged_loss = sum(losses) / float(len(losses))
 
         return grads, averaged_loss
 

@@ -37,13 +37,25 @@ class Driver(DriverBase):
         ray_mem = min(2 * (10 ** 10), int(total_mem * 0.8))
         memory_per_la = ray_mem / max(1, t_prof.n_learner_actors)
 
+        # Force CPU-only allocation for actors created by DriverBase (Chief and evaluators).
+        # These components do not require GPU resources and would otherwise reserve a
+        # fraction of the available GPUs when `eval_uses_gpu` is true.
+        MaybeRay._default_num_gpus = 0
+
+        super().__init__(t_prof=t_prof, eval_methods=eval_methods, n_iterations=n_iterations,
+                         iteration_to_import=iteration_to_import, name_to_import=name_to_import,
+                         chief_cls=Chief, eval_agent_cls=EvalAgentDeepCFR)
+
         def _is_cuda(device):
             return (
                 (isinstance(device, torch.device) and device.type == "cuda")
                 or (isinstance(device, str) and device.startswith("cuda"))
             )
 
-        total_gpu = torch.cuda.device_count() if torch.cuda.is_available() else 0
+        try:
+            total_gpu = ray.cluster_resources().get("GPU", 0)
+        except Exception:
+            total_gpu = 0
 
         adv_device = resolve_device(t_prof.module_args["adv_training"].device_training)
         inf_device = resolve_device(t_prof.device_inference)
@@ -58,15 +70,6 @@ class Driver(DriverBase):
         eval_gpu_workers = len(eval_methods) if eval_uses_gpu else 0
         gpu_workers = la_gpu_workers + ps_gpu_workers + eval_gpu_workers
         gpu_fraction = min(1.0, total_gpu / gpu_workers) if gpu_workers > 0 else 0
-
-        # Force CPU-only allocation for actors created by DriverBase (Chief and evaluators).
-        # These components do not require GPU resources and would otherwise reserve a
-        # fraction of the available GPUs when `eval_uses_gpu` is true.
-        MaybeRay._default_num_gpus = 0
-
-        super().__init__(t_prof=t_prof, eval_methods=eval_methods, n_iterations=n_iterations,
-                         iteration_to_import=iteration_to_import, name_to_import=name_to_import,
-                         chief_cls=Chief, eval_agent_cls=EvalAgentDeepCFR)
 
         # Restore the default so subsequent workers that do require GPU can opt in
         # by explicitly requesting it when created.

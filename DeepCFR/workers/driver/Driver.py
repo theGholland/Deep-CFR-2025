@@ -143,6 +143,13 @@ class Driver(DriverBase):
                          iteration_to_import=iteration_to_import, name_to_import=name_to_import,
                          chief_cls=Chief, eval_agent_cls=EvalAgentDeepCFR)
 
+        # ``DriverBase`` creates the Chief actor and returns a handle.  Our
+        # patched ``MaybeRay.create_worker`` assigns a unique name to every
+        # actor and stores it on the handle as ``_ray_name``.  Forward this
+        # primitive identifier to workers so they can reconstruct the chief
+        # handle within their own processes using ``ray.get_actor``.
+        self._chief_name = getattr(self.chief_handle, "_ray_name", None)
+
         def _is_cuda(device):
             return (
                 (isinstance(device, torch.device) and device.type == "cuda")
@@ -267,7 +274,7 @@ class Driver(DriverBase):
             self._ray.create_worker(LearnerActor,
                                     t_prof,
                                     i,
-                                    self.chief_handle,
+                                    self._chief_name,
                                     num_gpus=self._gpu_fraction if self._la_uses_gpu else 0,
                                     num_cpus=self._cpu_fraction,
                                     memory=self._memory_per_la)
@@ -280,7 +287,7 @@ class Driver(DriverBase):
                 ParameterServer,
                 t_prof,
                 p,
-                self.chief_handle,
+                self._chief_name,
                 num_gpus=self._gpu_fraction if self._ps_uses_gpu else 0,
                 num_cpus=self._cpu_fraction,
                 memory=self._memory_per_ps,

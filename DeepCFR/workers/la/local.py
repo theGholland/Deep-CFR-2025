@@ -52,14 +52,34 @@ def _check_gpu_metrics_available(device):
 
 class LearnerActor(WorkerBase):
 
-    def __init__(self, t_prof, worker_id, chief_handle):
+    def __init__(self, t_prof, worker_id, chief_ref):
+        """Create a new ``LearnerActor``.
+
+        Parameters
+        ----------
+        t_prof : TrainingProfile
+            Configuration object.
+        worker_id : int
+            Index of this learner.
+        chief_ref : Union[str, ActorHandle]
+            Either a Ray actor handle to the chief (when running locally) or
+            the *name* of the chief actor.  Passing the name allows the worker
+            to reconstruct the handle inside its own process via
+            ``ray.get_actor`` which only requires a primitive string.
+        """
         super().__init__(t_prof=t_prof)
+
+        if isinstance(chief_ref, str):  # Reconstruct from actor name
+            import ray
+
+            self._chief_handle = ray.get_actor(chief_ref)
+        else:
+            self._chief_handle = chief_ref
 
         self._adv_args = t_prof.module_args["adv_training"]
 
         self._env_bldr = rl_util.get_env_builder(t_prof=t_prof)
         self._id = worker_id
-        self._chief_handle = chief_handle
 
         self._device_inference = resolve_device(self._t_prof.device_inference)
         self._adv_device = resolve_device(self._adv_args.device_training)

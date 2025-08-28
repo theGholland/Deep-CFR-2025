@@ -92,7 +92,13 @@ try:  # pragma: no cover - best effort patching
         if name is None:
             import uuid
 
-            name = f"{cls.__name__}_{uuid.uuid4().hex}"
+            cls_name = getattr(cls, "__name__", None)
+            if cls_name is None:
+                cls_name = getattr(getattr(cls, "__ray_metadata__", None), "class_name", None)
+            if cls_name is None:
+                cls_name = cls.__class__.__name__
+
+            name = f"{cls_name}_{uuid.uuid4().hex}"
 
         if self.runs_distributed:
             if num_cpus is None:

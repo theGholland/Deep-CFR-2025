@@ -6,6 +6,7 @@ import psutil
 import torch
 import logging
 import subprocess
+from torch.utils.tensorboard import SummaryWriter
 
 from DeepCFR.IterationStrategy import IterationStrategy
 from DeepCFR.EvalAgentDeepCFR import EvalAgentDeepCFR
@@ -139,31 +140,11 @@ class LearnerActor(WorkerBase):
         }
 
         if self._t_prof.log_verbose:
-            self._exp_perf_handle = self._ray.get(
-                self._ray.remote(self._chief_handle.create_experiment,
-                                 f"LA{worker_id}/Perf"))
-            self._exp_mem_usage_handle = self._ray.get(
-                self._ray.remote(self._chief_handle.create_experiment,
-                                 f"LA{worker_id}/Memory_Usage"))
-            self._exps_adv_buffer_size_handles = self._ray.get(
-                [
-                    self._ray.remote(
-                        self._chief_handle.create_experiment,
-                        f"LA{worker_id}/P{p}/ADV_BufSize",
-                    )
-                    for p in range(self._t_prof.n_seats)
-                ]
-            )
-            if self._AVRG:
-                self._exps_avrg_buffer_size_handles = self._ray.get(
-                    [
-                        self._ray.remote(
-                            self._chief_handle.create_experiment,
-                            f"LA{worker_id}/P{p}/AVRG_BufSize",
-                        )
-                        for p in range(self._t_prof.n_seats)
-                    ]
-                )
+            log_dir = os.path.join(self._t_prof.path_log_storage, f"LA{worker_id}")
+            os.makedirs(log_dir, exist_ok=True)
+            self._tb_writer = SummaryWriter(log_dir=log_dir, flush_secs=5, max_queue=10)
+        else:
+            self._tb_writer = None
 
     def _query_gpu_metrics(self):
         """Return current GPU memory and utilization metrics.
@@ -231,37 +212,27 @@ class LearnerActor(WorkerBase):
         m["gpu_util"] += gpu_util
         m["count"] += 1
         m["total"] += 1
-        if self._t_prof.log_verbose and m["count"] >= self._perf_log_interval:
+        if self._t_prof.log_verbose and m["count"] >= self._perf_log_interval and self._tb_writer is not None:
             avg_time = m["time"] / m["count"]
             avg_cpu = m["cpu"] / m["count"]
-            self._ray.remote(self._chief_handle.add_scalar,
-                             self._exp_perf_handle, "GenerateData/Time", m["total"], avg_time)
-            self._ray.remote(self._chief_handle.add_scalar,
-                             self._exp_perf_handle, "GenerateData/CPU", m["total"], avg_cpu)
+            self._tb_writer.add_scalar("GenerateData/Time", avg_time, m["total"])
+            self._tb_writer.add_scalar("GenerateData/CPU", avg_cpu, m["total"])
             if self._gpu_device is not None and self._gpu_metrics_available:
                 avg_mem = m["gpu_mem"] / m["count"]
                 avg_util = m["gpu_util"] / m["count"]
-                self._ray.remote(self._chief_handle.add_scalar,
-                                 self._exp_perf_handle, "GenerateData/GPUMem", m["total"], avg_mem)
-                self._ray.remote(self._chief_handle.add_scalar,
-                                 self._exp_perf_handle, "GenerateData/GPUUtil", m["total"], avg_util)
+                self._tb_writer.add_scalar("GenerateData/GPUMem", avg_mem, m["total"])
+                self._tb_writer.add_scalar("GenerateData/GPUUtil", avg_util, m["total"])
             m.update({"time": 0.0, "cpu": 0.0, "gpu_mem": 0.0, "gpu_util": 0.0, "count": 0})
 
         # Log after both players generated data
-        if self._t_prof.log_verbose and traverser == 1 and (cfr_iter % 3 == 0):
+        if self._t_prof.log_verbose and traverser == 1 and (cfr_iter % 3 == 0) and self._tb_writer is not None:
             for p in range(self._t_prof.n_seats):
-                self._ray.remote(self._chief_handle.add_scalar,
-                                 self._exps_adv_buffer_size_handles[p], "Debug/BufferSize", cfr_iter,
-                                 self._adv_buffers[p].size)
+                self._tb_writer.add_scalar(f"P{p}/ADV_BufSize", self._adv_buffers[p].size, cfr_iter)
                 if self._AVRG:
-                    self._ray.remote(self._chief_handle.add_scalar,
-                                     self._exps_avrg_buffer_size_handles[p], "Debug/BufferSize", cfr_iter,
-                                     self._avrg_buffers[p].size)
+                    self._tb_writer.add_scalar(f"P{p}/AVRG_BufSize", self._avrg_buffers[p].size, cfr_iter)
 
             process = psutil.Process(os.getpid())
-            self._ray.remote(self._chief_handle.add_scalar,
-                             self._exp_mem_usage_handle, "Debug/MemoryUsage/LA", cfr_iter,
-                             process.memory_info().rss)
+            self._tb_writer.add_scalar("Debug/MemoryUsage/LA", process.memory_info().rss, cfr_iter)
 
     def update(self, adv_state_dicts=None, avrg_state_dicts=None):
         """
@@ -304,20 +275,16 @@ class LearnerActor(WorkerBase):
         m["gpu_util"] += gpu_util
         m["count"] += 1
         m["total"] += 1
-        if self._t_prof.log_verbose and m["count"] >= self._perf_log_interval:
+        if self._t_prof.log_verbose and m["count"] >= self._perf_log_interval and self._tb_writer is not None:
             avg_time = m["time"] / m["count"]
             avg_cpu = m["cpu"] / m["count"]
-            self._ray.remote(self._chief_handle.add_scalar,
-                             self._exp_perf_handle, "Update/Time", m["total"], avg_time)
-            self._ray.remote(self._chief_handle.add_scalar,
-                             self._exp_perf_handle, "Update/CPU", m["total"], avg_cpu)
+            self._tb_writer.add_scalar("Update/Time", avg_time, m["total"])
+            self._tb_writer.add_scalar("Update/CPU", avg_cpu, m["total"])
             if self._gpu_device is not None and self._gpu_metrics_available:
                 avg_mem = m["gpu_mem"] / m["count"]
                 avg_util = m["gpu_util"] / m["count"]
-                self._ray.remote(self._chief_handle.add_scalar,
-                                 self._exp_perf_handle, "Update/GPUMem", m["total"], avg_mem)
-                self._ray.remote(self._chief_handle.add_scalar,
-                                 self._exp_perf_handle, "Update/GPUUtil", m["total"], avg_util)
+                self._tb_writer.add_scalar("Update/GPUMem", avg_mem, m["total"])
+                self._tb_writer.add_scalar("Update/GPUUtil", avg_util, m["total"])
             m.update({"time": 0.0, "cpu": 0.0, "gpu_mem": 0.0, "gpu_util": 0.0, "count": 0})
 
     def get_loss_last_batch_adv(self, p_id):

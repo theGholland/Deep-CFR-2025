@@ -13,7 +13,6 @@ import re
 import shutil
 import warnings
 from datetime import datetime
-from torch.utils.tensorboard import SummaryWriter
 from DeepCFR.utils.device import resolve_device
 
 
@@ -208,13 +207,6 @@ class Driver(DriverBase):
         gpu_workers = la_gpu_workers + ps_gpu_workers + eval_gpu_workers
         gpu_fraction = total_gpu / max(1, gpu_workers)
 
-        if getattr(t_prof, "tb_writer", None) is not None:
-            try:
-                t_prof.tb_writer.flush()
-                t_prof.tb_writer.close()
-            except Exception:
-                pass
-        t_prof.tb_writer = SummaryWriter(log_dir=t_prof.path_log_storage, flush_secs=5, max_queue=10) if t_prof.log_verbose else None
         if t_prof.log_verbose:
             print(f"TensorBoard logs will be written to {t_prof.path_log_storage}")
 
@@ -381,13 +373,6 @@ class Driver(DriverBase):
                 self._ray.wait([self._ray.remote(self.chief_handle.close_tb_writers)])
             except Exception:
                 pass
-
-            if self._t_prof.tb_writer is not None:
-                try:
-                    self._t_prof.tb_writer.flush()
-                    self._t_prof.tb_writer.close()
-                except Exception:
-                    pass
 
             if getattr(self, "_tb_proc", None):
                 self._tb_proc.terminate()

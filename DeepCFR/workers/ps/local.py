@@ -3,6 +3,7 @@ import pickle
 
 import psutil
 from torch.optim import lr_scheduler
+from torch.utils.tensorboard import SummaryWriter
 
 from DeepCFR.EvalAgentDeepCFR import EvalAgentDeepCFR
 from PokerRL.rl import rl_util
@@ -25,9 +26,11 @@ class ParameterServer(ParameterServerBase):
         self._adv_optim, self._adv_lr_scheduler = self._get_new_adv_optim()
 
         if self._t_prof.log_verbose:
-            self._exp_mem_usage_handle = self._ray.get(
-                self._ray.remote(self._chief_handle.create_experiment,
-                                 f"PS{owner}/Memory_Usage"))
+            log_dir = os.path.join(self._t_prof.path_log_storage, f"PS{owner}")
+            os.makedirs(log_dir, exist_ok=True)
+            self._tb_writer = SummaryWriter(log_dir=log_dir, flush_secs=5, max_queue=10)
+        else:
+            self._tb_writer = None
 
         self._AVRG = EvalAgentDeepCFR.EVAL_MODE_AVRG_NET in self._t_prof.eval_modes_of_algo
         self._SINGLE = EvalAgentDeepCFR.EVAL_MODE_SINGLE in self._t_prof.eval_modes_of_algo
@@ -70,12 +73,10 @@ class ParameterServer(ParameterServerBase):
         else:
             raise ValueError(self._adv_args.init_adv_model)
 
-        if self._t_prof.log_verbose and (cfr_iter % 3 == 0):
+        if self._t_prof.log_verbose and (cfr_iter % 3 == 0) and self._tb_writer is not None:
             # Logs
             process = psutil.Process(os.getpid())
-            self._ray.remote(self._chief_handle.add_scalar,
-                             self._exp_mem_usage_handle, "Debug/MemoryUsage/PS", cfr_iter,
-                             process.memory_info().rss)
+            self._tb_writer.add_scalar("Debug/MemoryUsage/PS", process.memory_info().rss, cfr_iter)
 
     def reset_avrg_net(self):
         if self._avrg_args.init_avrg_model == "last":

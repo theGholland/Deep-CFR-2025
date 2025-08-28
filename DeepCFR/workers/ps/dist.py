@@ -6,5 +6,5 @@ from DeepCFR.workers.ps.local import ParameterServer as _LocalParameterServer
 @ray.remote
 class ParameterServer(_LocalParameterServer):
 
-    def __init__(self, t_prof, owner, chief_handle):
-        super().__init__(t_prof=t_prof, owner=owner, chief_handle=chief_handle)
+    def __init__(self, t_prof, owner, chief_ref):
+        super().__init__(t_prof=t_prof, owner=owner, chief_ref=chief_ref)

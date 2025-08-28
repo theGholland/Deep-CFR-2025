@@ -15,7 +15,16 @@ from DeepCFR.utils.device import resolve_device
 
 class ParameterServer(ParameterServerBase):
 
-    def __init__(self, t_prof, owner, chief_handle):
+    def __init__(self, t_prof, owner, chief_ref):
+        """Parameter server that may reconstruct the chief actor by name."""
+
+        if isinstance(chief_ref, str):
+            import ray
+
+            chief_handle = ray.get_actor(chief_ref)
+        else:
+            chief_handle = chief_ref
+
         super().__init__(t_prof=t_prof, chief_handle=chief_handle)
 
         self.owner = owner

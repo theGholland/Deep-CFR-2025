@@ -74,20 +74,44 @@ try:  # pragma: no cover - best effort patching
     MaybeRay._default_num_gpus = 0
     MaybeRay._object_store_memory = None
 
-    def _create_worker(self, cls, *args, num_gpus=0, num_cpus=None, memory=None):
-        """Create a Ray actor with optional resource allocation.
+    def _create_worker(self, cls, *args, num_gpus=0, num_cpus=None,
+                       memory=None, name=None):
+        """Create a Ray actor with optional resource allocation and naming.
+
+        Workers frequently need to reference one another (e.g., a
+        ``LearnerActor`` contacting the ``Chief``).  Passing an actor handle at
+        construction time makes process spawning brittle because Ray needs to
+        serialize the handle.  To enable reconstruction from primitive
+        parameters we optionally assign a *name* to every actor and attach this
+        name to the returned handle.  Child processes can then recover the
+        handle via ``ray.get_actor(name)``.
 
         GPU resources are not reserved automatically.  Actors that require a
         GPU must specify ``num_gpus`` explicitly when created.
         """
+        if name is None:
+            import uuid
+
+            name = f"{cls.__name__}_{uuid.uuid4().hex}"
+
         if self.runs_distributed:
             if num_cpus is None:
                 num_cpus = getattr(self, "_default_num_cpus", 1)
-            options_kwargs = {"num_gpus": num_gpus, "num_cpus": num_cpus}
+            options_kwargs = {"num_gpus": num_gpus, "num_cpus": num_cpus, "name": name}
             if memory is not None:
                 options_kwargs["memory"] = memory
-            return cls.options(**options_kwargs).remote(*args)
-        return cls(*args)
+            handle = cls.options(**options_kwargs).remote(*args)
+        else:
+            handle = cls(*args)
+
+        # Store the generated name on the handle so the caller can forward it to
+        # other processes.
+        try:  # pragma: no cover - best effort since handles may be simple objs
+            setattr(handle, "_ray_name", name)
+        except Exception:
+            pass
+
+        return handle
 
     MaybeRay.create_worker = _create_worker
 

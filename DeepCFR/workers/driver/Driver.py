@@ -225,35 +225,11 @@ class Driver(DriverBase):
             runs_distributed=t_prof.DISTRIBUTED,
             runs_cluster=t_prof.CLUSTER,
         )
-
-        def _get_free_port():
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(("", 0))
-                return s.getsockname()[1]
-
+        # Placeholder for the TensorBoard subprocess.  The actual process is
+        # started only after worker processes have been spawned to avoid
+        # pickling issues when the driver is used with multiprocessing.
         self._tb_proc = None
-        if t_prof.log_verbose:
-            tb_port = _get_free_port()
-            tb_cmd = [
-                "tensorboard",
-                "--logdir",
-                t_prof.path_log_storage,
-                "--host",
-                "0.0.0.0",
-                "--port",
-                str(tb_port),
-            ]
-            try:
-                self._tb_proc = subprocess.Popen(
-                    tb_cmd,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.STDOUT,
-                )
-                self._tb_port = tb_port
-                print(f"TensorBoard listening on http://0.0.0.0:{tb_port}/")
-            except Exception as ex:
-                self._tb_proc = None
-                print(f"Failed to start TensorBoard: {ex}")
+        self._tb_port = None
 
         self._cpu_fraction = cpu_fraction
         self._gpu_fraction = gpu_fraction
@@ -309,10 +285,64 @@ class Driver(DriverBase):
                                   ps_handles=self.ps_handles,
                                   chief_handle=self.chief_handle)
 
+        # Start TensorBoard only after worker processes have been spawned so
+        # that any multiprocessing-related pickling of the driver occurs before
+        # the subprocess handle is created.
+        self._start_tensorboard()
+
         self._AVRG = EvalAgentDeepCFR.EVAL_MODE_AVRG_NET in self._t_prof.eval_modes_of_algo
         self._SINGLE = EvalAgentDeepCFR.EVAL_MODE_SINGLE in self._t_prof.eval_modes_of_algo
 
         self._maybe_load_checkpoint_init()
+
+    def _start_tensorboard(self):
+        """Launch TensorBoard for monitoring if verbose logging is enabled.
+
+        The process is started after worker creation to avoid pickling
+        issues when the driver object is serialized for multiprocessing.
+        """
+        if not getattr(self._t_prof, "log_verbose", False):
+            return
+
+        def _get_free_port():
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("", 0))
+                return s.getsockname()[1]
+
+        tb_port = _get_free_port()
+        tb_cmd = [
+            "tensorboard",
+            "--logdir",
+            self._t_prof.path_log_storage,
+            "--host",
+            "0.0.0.0",
+            "--port",
+            str(tb_port),
+        ]
+        try:
+            self._tb_proc = subprocess.Popen(
+                tb_cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
+            )
+            self._tb_port = tb_port
+            print(f"TensorBoard listening on http://0.0.0.0:{tb_port}/")
+        except Exception as ex:
+            self._tb_proc = None
+            print(f"Failed to start TensorBoard: {ex}")
+
+    def __getstate__(self):
+        """Exclude the TensorBoard process handle when pickling."""
+        state = self.__dict__.copy()
+        state.pop("_tb_proc", None)
+        state.pop("_tb_port", None)
+        return state
+
+    def __setstate__(self, state):
+        """Restore state after unpickling."""
+        self.__dict__.update(state)
+        self._tb_proc = None
+        self._tb_port = None
 
     def run(self):
         print("Setting stuff up...")

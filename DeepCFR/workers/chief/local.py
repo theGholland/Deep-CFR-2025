@@ -26,9 +26,11 @@ class Chief(_ChiefBase):
         self._env_bldr = rl_util.get_env_builder(t_prof=t_prof)
         self._device_inference = resolve_device(self._t_prof.device_inference)
 
-        # SummaryWriter handles
+        # SummaryWriter handles; populated lazily after the worker starts to
+        # avoid creating unpickleable objects before the process is forked.
         self._writers = {}
         self._next_writer_handle = 0
+        self._exp_mem_usage_handle = None
 
         self._SINGLE = EvalAgentDeepCFR.EVAL_MODE_SINGLE in self._t_prof.eval_modes_of_algo
         self._AVRG = EvalAgentDeepCFR.EVAL_MODE_AVRG_NET in self._t_prof.eval_modes_of_algo
@@ -46,8 +48,18 @@ class Chief(_ChiefBase):
                 for p in range(t_prof.n_seats)
             ]
 
-            if self._t_prof.log_verbose:
-                self._exp_mem_usage_handle = self.create_experiment("Chief/Memory_Usage")
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # SummaryWriter instances are not picklable; omit them from state.
+        state["_writers"] = {}
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        # Reconstruct empty writer mapping on demand.
+        self._writers = {}
+        if getattr(self, "_exp_mem_usage_handle", None) is not None:
+            self._exp_mem_usage_handle = None
 
     def set_la_handles(self, *la_handles):
         self._la_handles = list(la_handles)
@@ -95,6 +107,12 @@ class Chief(_ChiefBase):
             except Exception:
                 pass
             del self._writers[key]
+
+    def _ensure_mem_usage_writer(self):
+        """Create the memory usage experiment lazily after the process starts."""
+        if self._exp_mem_usage_handle is None or self._exp_mem_usage_handle not in self._writers:
+            self._exp_mem_usage_handle = self.create_experiment("Chief/Memory_Usage")
+        return self._exp_mem_usage_handle
 
     # ____________________________________________________ Strategy ____________________________________________________
     def pull_current_eval_strategy(self, last_iteration_receiver_has):
@@ -174,11 +192,10 @@ class Chief(_ChiefBase):
                                 file_name=str(iter_strat.cfr_iteration) + "_P" + str(iter_strat.owner) + ".pkl"
                                 )
 
-        if self._t_prof.log_verbose:
-            if owner == 1:
-                # Logs
-                process = psutil.Process(os.getpid())
-                self.add_scalar(self._exp_mem_usage_handle, "Debug/Memory Usage/Chief", cfr_iter, process.memory_info().rss)
+        if self._t_prof.log_verbose and owner == 1:
+            process = psutil.Process(os.getpid())
+            handle = self._ensure_mem_usage_writer()
+            self.add_scalar(handle, "Debug/Memory Usage/Chief", cfr_iter, process.memory_info().rss)
 
     # ________________________________ Store a pickled API class to play against the AI ________________________________
     def export_agent(self, step):

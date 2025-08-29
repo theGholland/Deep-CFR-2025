@@ -4,6 +4,24 @@ __all__ = []
 __version__ = "0.1.0"
 
 # ---------------------------------------------------------------------------
+# Multiprocessing start method
+# ---------------------------------------------------------------------------
+#
+# Ray defaults to forking worker processes which is unsafe once CUDA has been
+# initialised in the parent process.  To avoid ``SIGABRT`` crashes stemming from
+# a forked CUDA runtime, force Python's multiprocessing start method to ``spawn``
+# and instruct Ray to do the same via environment variable.  These statements
+# must run before importing Ray.
+import multiprocessing as _mp
+import os as _os
+
+_os.environ.setdefault("RAY_START_METHOD", "spawn")
+try:  # pragma: no cover - start method can be set only once
+    _mp.set_start_method("spawn", force=True)
+except RuntimeError:
+    pass
+
+# ---------------------------------------------------------------------------
 # Compatibility patch for Ray >=2.0
 # ---------------------------------------------------------------------------
 #

@@ -219,10 +219,11 @@ class EvalAgentDeepCFR(_EvalAgentBase):
                 # """"""""""""""""""""""
                 # Weighted by Reach
                 # """"""""""""""""""""""
+                # Expand reach weights to shape [n_models, 1] so they broadcast over action probabilities
                 a_probs_each_model *= np.expand_dims(self._get_reach_for_each_model(
                     p_id_acting=p_id_acting,
                     range_idx=range_idx,
-                ), axis=2)
+                ), axis=1)
 
                 # """"""""""""""""""""""
                 # Normalize

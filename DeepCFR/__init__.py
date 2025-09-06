@@ -15,7 +15,10 @@ __version__ = "0.1.0"
 import multiprocessing as _mp
 import os as _os
 
-_os.environ.setdefault("RAY_START_METHOD", "spawn")
+# Ensure Ray uses the safe ``spawn`` start method instead of the default
+# ``fork`` which is incompatible with CUDA initialised in the parent process.
+# ``RAY_USE_MULTIPROCESSING_START_METHOD`` is honoured by Ray >=1.10.
+_os.environ.setdefault("RAY_USE_MULTIPROCESSING_START_METHOD", "spawn")
 try:  # pragma: no cover - start method can be set only once
     _mp.set_start_method("spawn", force=True)
 except RuntimeError:

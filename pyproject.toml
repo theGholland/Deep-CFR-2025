@@ -11,7 +11,7 @@ requires-python = ">=3.12"
 authors = [{ name = "Eric Steinberger" }]
 license = {file = "LICENSE"}
 dependencies = [
-    "numpy==2.3.2",
+    "numpy==2.4.1",
     "psutil==7.0.0",
     "ray[default]==2.48.0",
     "torch==2.8.0",
